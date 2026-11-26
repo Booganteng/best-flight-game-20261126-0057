@@ -128,5 +128,5 @@ export function buildWorld(seed) {
   return world;
 }
 
-// The sun hangs low in the west, so the light and the long shadows all agree.
-export const SUN = { azimuth: -2.25, elevation: 0.32 };
+// Bright daylight sun, high in the sky (Flight Sim 2018 look).
+export const SUN = { azimuth: -2.25, elevation: 0.85 };
