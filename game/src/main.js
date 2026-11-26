@@ -7,7 +7,7 @@ import { createAircraft, stepAircraft } from './aircraft.js';
 import { createMission, currentTarget, stepMission, onLanding, missionProgress } from './missions.js';
 import { createInput } from './input.js';
 import { createAudio } from './audio.js';
-import { drawFrame } from './render.js';
+import { createRenderer3D } from './render3d.js';
 import { stageShot } from './shots.js';
 import { clamp } from './random.js';
 
@@ -16,17 +16,7 @@ const seed = Number(params.get('seed') || 7);
 const shotName = params.get('shot') || '';
 
 const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
 const statusEl = document.getElementById('status');
-
-function resize() {
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
-  canvas.width = Math.round(window.innerWidth * dpr);
-  canvas.height = Math.round(window.innerHeight * dpr);
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-}
-resize();
-window.addEventListener('resize', resize);
 
 const world = buildWorld(seed);
 const input = createInput(canvas);
@@ -45,9 +35,18 @@ const game = {
   crashReason: '',
   summaryLine: '',
   hoverCard: -1,
+  cockpit: false,
   missionCards: MISSIONS.map((m) => ({ key: m.key, name: m.name, tag: m.tag, timeLimit: `${Math.floor(m.timeLimit / 60)} min` })),
   best: 0,
 };
+
+// The 3D renderer owns the canvas + the HUD overlay; title cards call back here.
+const renderer3D = createRenderer3D(canvas, world, { onStartMission: (id) => startMission(id) });
+
+function resize() {
+  renderer3D.resize();
+}
+window.addEventListener('resize', resize);
 
 function setFlash(text, sub, color) {
   game.flash = { text, sub: sub || '', color: color || '#ffffff', at: game.time };
@@ -149,22 +148,6 @@ game.step = function step(dt, pilotInput, silent) {
   audio.engine(plane.throttle, plane.flying);
 };
 
-function missionCardAt(x, y) {
-  const W = window.innerWidth;
-  const H = window.innerHeight;
-  const cardW = 300;
-  const cardH = 150;
-  const gap = 26;
-  const totalW = cardW * 3 + gap * 2;
-  let cx = (W - totalW) / 2;
-  const cy = H - 268;
-  for (let i = 0; i < 3; i += 1) {
-    if (x >= cx && x <= cx + cardW && y >= cy && y <= cy + cardH) return i;
-    cx += cardW + gap;
-  }
-  return -1;
-}
-
 let last = performance.now();
 let acc = 0;
 
@@ -175,20 +158,19 @@ function frame(now) {
   const W = window.innerWidth;
   const H = window.innerHeight;
 
-  // Title screen keys and clicks.
+  // Title screen keys and clicks (cards are DOM buttons now; canvas clicks do nothing).
   if (game.screen === 'title') {
     for (const card of MISSIONS) {
       if (input.consume(`Digit${card.key}`) || input.consume(`Numpad${card.key}`)) {
         startMission(card.id);
       }
     }
-    const rect = canvas.getBoundingClientRect();
-    game.hoverCard = missionCardAt(input.mouse.x - rect.left, input.mouse.y - rect.top);
-    if (input.mouse.clicked) {
-      input.mouse.clicked = false;
-      const hit = missionCardAt(input.mouse.x - rect.left, input.mouse.y - rect.top);
-      if (hit >= 0) startMission(MISSIONS[hit].id);
-    }
+    input.mouse.clicked = false;
+  }
+
+  if (input.consume('KeyC')) {
+    game.cockpit = !game.cockpit;
+    renderer3D.setCockpit(game.cockpit);
   }
 
   if (input.consume('KeyP') && (game.screen === 'play' || game.screen === 'paused')) {
@@ -221,7 +203,7 @@ function frame(now) {
   game.mission.objectiveLabel = target ? target.label : 'Fly free';
   game.mission.progressLabel = missionProgress(game.mission);
 
-  drawFrame(ctx, game, W, H, game.time);
+  renderer3D.drawFrame(game, W, H, game.time);
   document.title = `${GAME.title} — ${game.mission.name} · ${game.mission.score} pts`;
 }
 
@@ -232,7 +214,7 @@ if (shotName) {
   stageShot(shotName, game);
   game.mission.objectiveLabel = currentTarget(game.mission, world)?.label || 'Fly free';
   game.mission.progressLabel = missionProgress(game.mission);
-  drawFrame(ctx, game, window.innerWidth, window.innerHeight, game.time);
+  renderer3D.drawFrame(game, window.innerWidth, window.innerHeight, game.time);
   document.title = `shot:${shotName}`;
 } else {
   requestAnimationFrame(frame);
