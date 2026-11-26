@@ -1,15 +1,12 @@
 // Sky Harbour — Island Run: the 3D renderer (Three.js, vendored locally).
-// Visual theme "Golden Hour" (theme-factory): warm sunset light, blue sky
-// above, vivid green fields, ocean-blue sea, one coherent palette across
-// sky, sea, land, aircraft livery and HUD. The look follows the five
-// references tuan muda sent (MSFS-style): a white single-engine prop tourer
-// with a blue cheatline and red tail, flying over a winding river, green
-// fields, a small red-roof town, dramatic layered clouds, and above a sea
-// of clouds; the cockpit (key C) is a glass cockpit with glowing screens.
-// Everything is built from the world state each frame; no images, no
-// network, no pasted photos — all real-time 3D, all screenshots from real
-// gameplay. Shapes are smooth and organic (extruded rounded wings, gable
-// roofs, faceted mounds) — never raw unshaded blocks.
+// Visual theme "Bright Day" (Flight Sim 2018): vivid blue daylight sky,
+// bright sun with glare, a four-engine airliner (white/blue/red) over a
+// coastal city + airport — dark runway, control tower, red-white terminal,
+// grey-blue towers, green hills. Everything is built from the world state
+// each frame; no images, no network, no pasted photos — all real-time 3D,
+// all screenshots from real gameplay. Shapes are smooth and organic
+// (extruded swept wings, gable roofs, faceted mounds) — never raw
+// unshaded blocks.
 import * as THREE from '../vendor/three/three.module.min.js';
 import { VIEW, WORLD, MISSIONS } from './config.js';
 import { clamp, lerp, headingDeg, compassPoint, formatTime, mulberry32, range } from './random.js';
@@ -19,20 +16,17 @@ function smooth(t) {
   return t * t * (3 - 2 * t);
 }
 
-// Ref 3 palette (final push, tuan muda: match the PHOTO's colours, not a
-// deep-orange sunset): pale soft blue sky, a horizon that is only faintly
-// warm gold toward the sun and pale cool blue away from it, pale blue-grey
-// haze the distant sea melts into, warm-white cloud tops, soft blue-grey
-// cloud valleys, deep calm blue sea. Golden Hour stays warm, but soft and
-// pale blue-white — never saturated orange.
+// Daylight palette (Flight Sim 2018: bright clear blue day, NOT golden
+// hour): vivid blue sky, pale blue-white horizon, light blue haze, bright
+// blue sea. The sun is high, the light soft and even.
 const DAY = {
-  skyTop: 0x1e6fc4,
-  skyMid: 0x5ea0d8,
-  skyHorizon: 0xe9c795,
-  skyHorizonCool: 0xdce8ee,
-  skyBelow: 0x93a7ba,
-  fog: 0xd3dde8,
-  sea: 0x20598a,
+  skyTop: 0x1e7ae0,
+  skyMid: 0x5fb2f0,
+  skyHorizon: 0xd8ecf7,
+  skyHorizonCool: 0xd8ecf7,
+  skyBelow: 0x8fb0c8,
+  fog: 0xcfe2f2,
+  sea: 0x2a72b8,
   sand: 0xe8d29a,
   grassA: 0x55853f,
   grassB: 0x74a854,
@@ -157,24 +151,6 @@ function buildIslandGeometry(island, seed, world) {
   return geo;
 }
 
-// A tapered wing with a rounded tip, extruded with a small bevel so the edge
-// reads smooth, never a raw box.
-function wingGeometry(span, rootChord, tipChord) {
-  const s = new THREE.Shape();
-  s.moveTo(0, -rootChord / 2);
-  s.lineTo(span * 0.88, -tipChord / 2);
-  s.quadraticCurveTo(span, -tipChord * 0.35, span, 0);
-  s.quadraticCurveTo(span, tipChord * 0.35, span * 0.88, tipChord / 2);
-  s.lineTo(0, rootChord / 2);
-  s.closePath();
-  const g = new THREE.ExtrudeGeometry(s, {
-    depth: 0.26, bevelEnabled: true, bevelThickness: 0.13, bevelSize: 0.13, bevelSegments: 3, steps: 1,
-  });
-  g.rotateX(-Math.PI / 2);
-  g.translate(0, -0.13, 0);
-  return g;
-}
-
 export function createRenderer3D(canvas, world, hooks) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
@@ -182,7 +158,7 @@ export function createRenderer3D(canvas, world, hooks) {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.12;
+  renderer.toneMappingExposure = 1.18;
 
   const scene = new THREE.Scene();
   // Warm haze: the sea (radius 5600) is fully fogged out before its edge,
@@ -191,10 +167,9 @@ export function createRenderer3D(canvas, world, hooks) {
   // so the deck melts into the haze instead of ending in a straight line.
   scene.fog = new THREE.Fog(DAY.fog, 800, 3600);
 
-  // Gradient sky dome: deep blue zenith, warm gold horizon toward the sun,
-  // pale cool horizon away from it — the Golden Hour look from every angle.
-  // The horizon band blends by azimuth so the sky is gold where the sun
-  // hangs and cool blue on the far side, like ref 1.
+  // Gradient sky dome: vivid blue zenith, pale blue-white horizon — the
+  // bright daylight look from every angle. The horizon band blends by
+  // azimuth so the sky is brightest where the sun hangs.
   {
     const skyGeo = new THREE.SphereGeometry(9000, 24, 12);
     const pos = skyGeo.attributes.position;
@@ -237,7 +212,7 @@ export function createRenderer3D(canvas, world, hooks) {
 
   // One warm sun direction for everything, low and golden, plus a cool fill
   // from the east so white surfaces never fall flat grey.
-  const hemi = new THREE.HemisphereLight(0xcfe0f5, 0x66788a, 1.05);
+  const hemi = new THREE.HemisphereLight(0xd6e8f8, 0x66788a, 1.3);
   scene.add(hemi);
   const fill = new THREE.DirectionalLight(0xbfd9ff, 0.55);
   fill.position.set(800, 500, 600);
@@ -247,7 +222,7 @@ export function createRenderer3D(canvas, world, hooks) {
     Math.sin(SUN.elevation),
     Math.cos(SUN.azimuth) * Math.cos(SUN.elevation),
   );
-  const sun = new THREE.DirectionalLight(0xffe2b0, 2.8);
+  const sun = new THREE.DirectionalLight(0xfff2d0, 3.2);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.camera.left = -480;
@@ -260,16 +235,16 @@ export function createRenderer3D(canvas, world, hooks) {
   scene.add(sun);
   scene.add(sun.target);
 
-  // A visible sun disc + warm glow low in the west, so the sunset shot
-  // (2-play, facing the sun) reads as Golden Hour instead of pale haze.
+  // A visible sun disc + bright glare high in the sky, so the daylight
+  // shots (2-play, facing the sun) carry the Flight Sim 2018 glare.
   // The glow is a soft radial-gradient sprite (no hard edge); the disc is
   // a small bright circle. Both sit inside the sky dome (8400 < 9000) and
   // terrain still occludes them.
   {
     const sunPos = sunDir.clone().multiplyScalar(8400);
     const disc = new THREE.Mesh(
-      new THREE.CircleGeometry(130, 32),
-      new THREE.MeshBasicMaterial({ color: 0xfff8d0, fog: false, depthWrite: false, side: THREE.DoubleSide }),
+      new THREE.CircleGeometry(160, 32),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false, depthWrite: false, side: THREE.DoubleSide }),
     );
     disc.position.copy(sunPos);
     disc.lookAt(camera.position);
@@ -280,16 +255,16 @@ export function createRenderer3D(canvas, world, hooks) {
     gc.height = 256;
     const g = gc.getContext('2d');
     const grad = g.createRadialGradient(128, 128, 0, 128, 128, 128);
-    grad.addColorStop(0, 'rgba(255, 216, 150, 0.5)');
-    grad.addColorStop(0.35, 'rgba(255, 206, 140, 0.28)');
-    grad.addColorStop(0.7, 'rgba(255, 200, 130, 0.1)');
+    grad.addColorStop(0, 'rgba(255, 216, 150, 0.6)');
+    grad.addColorStop(0.35, 'rgba(255, 206, 140, 0.35)');
+    grad.addColorStop(0.7, 'rgba(255, 200, 130, 0.12)');
     grad.addColorStop(1, 'rgba(255, 200, 130, 0)');
     g.fillStyle = grad;
     g.fillRect(0, 0, 256, 256);
     const glowTex = new THREE.CanvasTexture(gc);
     const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, fog: false, depthWrite: false }));
     glow.position.copy(sunPos);
-    glow.scale.set(4600, 4600, 1);
+    glow.scale.set(5600, 5600, 1);
     glow.renderOrder = -0.6;
     scene.add(glow);
   }
@@ -423,7 +398,7 @@ export function createRenderer3D(canvas, world, hooks) {
   {
     const rng = mulberry32(world.seed + 4242);
     for (const island of world.islands) {
-      const count = island === world.islands[0] ? 20 : 13;
+      const count = island === world.islands[0] ? 26 : 18;
       let placed = 0;
       let guard = 0;
       while (placed < count && guard < 300) {
@@ -551,7 +526,7 @@ export function createRenderer3D(canvas, world, hooks) {
     const coniferSpots = [];
     const rng = mulberry32(world.seed + 991);
     for (const island of world.islands) {
-      for (let i = 0; i < 14; i += 1) {
+      for (let i = 0; i < 18; i += 1) {
         const a = rng() * Math.PI * 2;
         const d = island.r * (0.25 + rng() * 0.55);
         const x = island.x + Math.cos(a) * d;
@@ -635,7 +610,7 @@ export function createRenderer3D(canvas, world, hooks) {
   {
     const dummy = new THREE.Object3D();
     const lightGeo = new THREE.SphereGeometry(0.9, 8, 6);
-    const lightMat = new THREE.MeshBasicMaterial({ color: 0xffb020 });
+    const lightMat = new THREE.MeshBasicMaterial({ color: 0x2aff66 });
     const lights = new THREE.InstancedMesh(lightGeo, lightMat, lightPositions.length);
     lightPositions.forEach((p, i) => {
       dummy.position.set(p.x, p.y, p.z);
@@ -645,6 +620,137 @@ export function createRenderer3D(canvas, world, hooks) {
     });
     lights.instanceMatrix.needsUpdate = true;
     scene.add(lights);
+  }
+
+  // AIRPORT + CITY (Flight Sim 2018): the home airport gets a control
+  // tower + red-white terminal, and two dense city districts (Harbour east
+  // of the runway, Coral's near side in the ring corridor) fill the
+  // screenshots with towers instead of empty sea. Towers are instanced
+  // boxes with a shared window-grid texture; each sits at groundHeight.
+  function makeCityTexture() {
+    const c = document.createElement('canvas');
+    c.width = 128;
+    c.height = 256;
+    const g = c.getContext('2d');
+    g.fillStyle = '#a9b6c4';
+    g.fillRect(0, 0, 128, 256);
+    const trng = mulberry32(world.seed + 606);
+    for (let y = 8; y < 248; y += 16) {
+      for (let x = 8; x < 120; x += 16) {
+        const lit = trng() < 0.12;
+        g.fillStyle = lit ? '#ffd27a' : '#2a3644';
+        g.fillRect(x, y, 9, 10);
+      }
+    }
+    return new THREE.CanvasTexture(c);
+  }
+  const cityTex = makeCityTexture();
+  {
+    const rng = mulberry32(world.seed + 808);
+    const towerGeo = new THREE.BoxGeometry(1, 1, 1);
+    const towerMat = new THREE.MeshStandardMaterial({ map: cityTex, roughness: 0.85, metalness: 0.05 });
+    const spots = [];
+    const addDistrict = (cx, cz, n, spread, hMin, hMax) => {
+      for (let i = 0; i < n; i += 1) {
+        const x = cx + range(rng, -spread, spread);
+        const z = cz + range(rng, -spread, spread);
+        const y = world.groundHeight(x, z);
+        if (y < 2 || y > 26) continue;
+        if (world.runwayAt(x, z)) continue;
+        // Keep the home airport clear: nothing inside the runway strip zone.
+        if (Math.abs(x) < 95 && Math.abs(z) < 260) continue;
+        spots.push({ x, z, y, w: range(rng, 13, 26), h: range(rng, hMin, hMax), d: range(rng, 13, 26), rot: (rng() < 0.5 ? 0 : Math.PI / 2) + range(rng, -0.05, 0.05) });
+      }
+    };
+    // Harbour city: east of the home runway, in the title + landing shots.
+    addDistrict(200, 40, 32, 170, 15, 55);
+    // Coral city: near side of Coral island, in the ring-corridor shots.
+    addDistrict(-980, -720, 20, 130, 15, 48);
+    const towers = new THREE.InstancedMesh(towerGeo, towerMat, spots.length);
+    const dummy = new THREE.Object3D();
+    const col = new THREE.Color();
+    const tints = [0xffffff, 0xdde6ee, 0xc2d0dd, 0xe8e2d5];
+    spots.forEach((s, i) => {
+      dummy.position.set(s.x, s.y + s.h / 2, s.z);
+      dummy.rotation.set(0, s.rot, 0);
+      dummy.scale.set(s.w, s.h, s.d);
+      dummy.updateMatrix();
+      towers.setMatrixAt(i, dummy.matrix);
+      col.setHex(tints[i % tints.length]);
+      towers.setColorAt(i, col);
+    });
+    towers.castShadow = true;
+    towers.receiveShadow = true;
+    towers.instanceMatrix.needsUpdate = true;
+    if (towers.instanceColor) towers.instanceColor.needsUpdate = true;
+    scene.add(towers);
+    // A landmark tower, taller than the rest, in each district.
+    const landmarkMat = new THREE.MeshStandardMaterial({ map: cityTex, roughness: 0.8, metalness: 0.1 });
+    for (const lm of [{ x: 230, z: 90, w: 30, h: 78, d: 30 }, { x: -1010, z: -680, w: 28, h: 70, d: 28 }]) {
+      const y = world.groundHeight(lm.x, lm.z);
+      const m = new THREE.Mesh(towerGeo, landmarkMat);
+      m.position.set(lm.x, y + lm.h / 2, lm.z);
+      m.scale.set(lm.w, lm.h, lm.d);
+      m.castShadow = true;
+      scene.add(m);
+    }
+  }
+  // Home airport: control tower + red-white terminal + taxiway, east of
+  // the home runway (runway heading 0 = north, strip x ±13, z ±170).
+  {
+    const apronY = 6.4;
+    // Taxiway strip parallel to the runway.
+    const taxi = new THREE.Mesh(
+      new THREE.PlaneGeometry(14, 300),
+      new THREE.MeshStandardMaterial({ color: 0x3a3f45, roughness: 0.95 }),
+    );
+    taxi.rotation.x = -Math.PI / 2;
+    taxi.position.set(42, apronY, 0);
+    taxi.receiveShadow = true;
+    scene.add(taxi);
+    // Terminal: long white hall with a red roof band, ahead-right of the
+    // landing approach so it shows in the 4-end shot.
+    const term = new THREE.Mesh(
+      new THREE.BoxGeometry(46, 9, 16),
+      new THREE.MeshStandardMaterial({ color: 0xeef1f3, roughness: 0.8 }),
+    );
+    term.position.set(62, apronY + 4.5, 110);
+    term.castShadow = true;
+    term.receiveShadow = true;
+    scene.add(term);
+    const termRoof = new THREE.Mesh(
+      new THREE.BoxGeometry(46, 1.6, 16),
+      new THREE.MeshStandardMaterial({ color: DAY.roofA, roughness: 0.85 }),
+    );
+    termRoof.position.set(62, apronY + 9.8, 110);
+    scene.add(termRoof);
+    const term2 = new THREE.Mesh(
+      new THREE.BoxGeometry(36, 8, 14),
+      new THREE.MeshStandardMaterial({ color: 0xeef1f3, roughness: 0.8 }),
+    );
+    term2.position.set(62, apronY + 4, 30);
+    term2.castShadow = true;
+    scene.add(term2);
+    // Control tower: shaft + glass cab + red roof, beside the terminal.
+    const shaft = new THREE.Mesh(
+      new THREE.CylinderGeometry(3.2, 4.2, 42, 12),
+      new THREE.MeshStandardMaterial({ color: 0xe8ebee, roughness: 0.85 }),
+    );
+    shaft.position.set(56, apronY + 21, 70);
+    shaft.castShadow = true;
+    scene.add(shaft);
+    const cab = new THREE.Mesh(
+      new THREE.CylinderGeometry(6.5, 5.0, 6, 12),
+      new THREE.MeshStandardMaterial({ color: 0x1d3a4a, roughness: 0.25, metalness: 0.5 }),
+    );
+    cab.position.set(56, apronY + 45, 70);
+    scene.add(cab);
+    const cabRoof = new THREE.Mesh(
+      new THREE.CylinderGeometry(6.8, 6.8, 0.8, 12),
+      new THREE.MeshStandardMaterial({ color: DAY.roofA, roughness: 0.85 }),
+    );
+    cabRoof.position.set(56, apronY + 48.4, 70);
+    scene.add(cabRoof);
   }
 
   // Cloud sea (ref 3 = the minimum bar: above a sea of clouds). The old
@@ -903,14 +1009,13 @@ export function createRenderer3D(canvas, world, hooks) {
     }
   }
 
-  // The tourer: white with a blue cheatline and red tail, TBM-style —
-  // sleek low-wing single-prop, smooth extruded wings and fin, three-blade
-  // prop. The visual model sits 1.9 m above the physics origin so the gear
-  // meets the ground when parked.
+  // The jet: an A380-style four-engine airliner (Flight Sim 2018 look) —
+  // very long white fuselage (length ≈ wingspan) with a blue belly band,
+  // low swept wings, four blue-white engine nacelles, red-blue tail.
+  // NO propeller at all. The visual model sits 1.9 m above the physics
+  // origin so the gear meets the ground when parked.
   const PLANE_LIFT = 1.9;
   const planeGroup = new THREE.Group();
-  let propGroup;
-  let propMat;
   let gearGroup;
   let strobe;
   {
@@ -922,118 +1027,143 @@ export function createRenderer3D(canvas, world, hooks) {
       color: DAY.glass, roughness: 0.05, metalness: 0.7, transparent: true, opacity: 0.95,
     });
     const dark = new THREE.MeshStandardMaterial({ color: 0x2b2b2b, roughness: 0.7 });
+    const windowMat = new THREE.MeshStandardMaterial({ color: 0x18242f, roughness: 0.25, metalness: 0.4 });
 
-    const fuselage = new THREE.Mesh(new THREE.CapsuleGeometry(1.0, 5.2, 8, 24), white);
+    // Fuselage: very long and slim — length ≈ wingspan, like an A380.
+    const fuselage = new THREE.Mesh(new THREE.CapsuleGeometry(1.15, 11.5, 8, 24), white);
     fuselage.rotation.x = Math.PI / 2;
     fuselage.castShadow = true;
     planeGroup.add(fuselage);
-    // Blue cheatline along each flank — thick and long, running from the
-    // nose all the way back into the red tail band, so the livery reads
-    // from any angle.
+    // Blue belly keel under the fuselage.
+    const belly = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.16, 10.5), blue);
+    belly.position.set(0, -1.06, 0.3);
+    planeGroup.add(belly);
+    // Blue cheatline along each flank, low on the fuselage.
     for (const side of [-1, 1]) {
-      const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.5, 7.0), blue);
-      stripe.position.set(side * 1.0, 0.05, 0.2);
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.7, 11.5), blue);
+      stripe.position.set(side * 1.14, -0.25, 0.3);
       planeGroup.add(stripe);
     }
-    // Red band around the tail.
-    const tailBand = new THREE.Mesh(new THREE.CylinderGeometry(1.02, 1.02, 0.55, 24), red);
-    tailBand.rotation.x = Math.PI / 2;
-    tailBand.position.set(0, 0, -3.3);
-    planeGroup.add(tailBand);
-    // Long sleek nose.
-    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.92, 1.9, 24), white);
+    // Passenger windows: one dark row per flank (instanced) — this alone
+    // sells "airliner" from any distance.
+    {
+      const winGeo = new THREE.BoxGeometry(0.06, 0.32, 0.42);
+      const perSide = 15;
+      const wins = new THREE.InstancedMesh(winGeo, windowMat, perSide * 2);
+      const dummy = new THREE.Object3D();
+      let k = 0;
+      for (const side of [-1, 1]) {
+        for (let i = 0; i < perSide; i += 1) {
+          dummy.position.set(side * 1.16, 0.35, 4.6 - i * 0.72);
+          dummy.rotation.set(0, 0, 0);
+          dummy.scale.set(1, 1, 1);
+          dummy.updateMatrix();
+          wins.setMatrixAt(k, dummy.matrix);
+          k += 1;
+        }
+      }
+      wins.instanceMatrix.needsUpdate = true;
+      planeGroup.add(wins);
+    }
+    // Long tapered nose + dark cockpit windshield.
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(1.05, 2.6, 24), white);
     nose.rotation.x = Math.PI / 2;
-    nose.position.set(0, 0, 4.5);
+    nose.position.set(0, 0, 7.0);
     nose.castShadow = true;
     planeGroup.add(nose);
-    const tail = new THREE.Mesh(new THREE.ConeGeometry(0.85, 1.7, 24), white);
+    const cockpitGlass = new THREE.Mesh(new THREE.SphereGeometry(0.95, 24, 18, 0, Math.PI * 2, 0, Math.PI / 2), glassMat);
+    cockpitGlass.scale.set(0.95, 0.5, 1.2);
+    cockpitGlass.position.set(0, 0.75, 5.9);
+    planeGroup.add(cockpitGlass);
+    // Tail cone + APU tip.
+    const tail = new THREE.Mesh(new THREE.ConeGeometry(0.9, 2.2, 24), white);
     tail.rotation.x = -Math.PI / 2;
-    tail.position.set(0, 0, -4.3);
+    tail.position.set(0, 0.15, -6.6);
     tail.castShadow = true;
     planeGroup.add(tail);
-    // Low wings, tapered with rounded tips, slight dihedral.
-    const wingGeoR = wingGeometry(7.2, 2.4, 1.4);
+    // Swept low wings (jet): strong sweep, slight dihedral, red wingtip
+    // fences. A helper builds a swept tapered wing from a shape.
+    const sweptWing = (span, rootChord, tipChord, sweep) => {
+      const s = new THREE.Shape();
+      s.moveTo(0, -rootChord / 2);
+      s.lineTo(span * 0.92, -tipChord / 2 + sweep);
+      s.quadraticCurveTo(span, -tipChord * 0.3 + sweep, span, sweep);
+      s.quadraticCurveTo(span, tipChord * 0.3 + sweep, span * 0.92, tipChord / 2 + sweep);
+      s.lineTo(0, rootChord / 2);
+      s.closePath();
+      const g = new THREE.ExtrudeGeometry(s, {
+        depth: 0.3, bevelEnabled: true, bevelThickness: 0.12, bevelSize: 0.12, bevelSegments: 3, steps: 1,
+      });
+      g.rotateX(-Math.PI / 2);
+      g.translate(0, -0.15, 0);
+      return g;
+    };
+    const wingGeoR = sweptWing(8.0, 3.4, 1.2, 2.8);
     for (const side of [-1, 1]) {
       const wing = new THREE.Mesh(wingGeoR, white);
-      wing.position.set(side * 0.3, -0.55, 0.6);
+      wing.position.set(side * 0.3, -0.55, 0.8);
       if (side < 0) wing.rotation.y = Math.PI;
-      wing.rotation.z = side * 0.06;
+      wing.rotation.z = side * 0.04;
       wing.castShadow = true;
       planeGroup.add(wing);
-      // Red wingtip caps — the blue cheatline's counterpart at the tips.
-      const tip = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 1.0), red);
-      tip.position.set(side * 7.2, -0.55, 0.6);
-      planeGroup.add(tip);
-      const tailplane = new THREE.Mesh(wingGeometry(2.9, 1.15, 0.8), white);
-      tailplane.position.set(side * 0.2, 0.3, -4.4);
+      // Red wingtip fence (vertical, A380-style).
+      const fence = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.0, 0.9), red);
+      fence.position.set(side * 8.0, -0.2, -2.0);
+      planeGroup.add(fence);
+      // Swept tailplane.
+      const tailplane = new THREE.Mesh(sweptWing(3.4, 1.8, 0.8, 1.2), white);
+      tailplane.position.set(side * 0.2, 0.35, -6.2);
       if (side < 0) tailplane.rotation.y = Math.PI;
       tailplane.castShadow = true;
       planeGroup.add(tailplane);
+      // Two engine nacelles per wing (blue-white, intakes ahead of the
+      // leading edge): inboard + outboard.
+      for (const [ex, ez] of [[2.6, 0.7], [5.4, -0.2]]) {
+        const nac = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.5, 2.8, 20), white);
+        body.rotation.x = Math.PI / 2;
+        body.castShadow = true;
+        nac.add(body);
+        const lip = new THREE.Mesh(new THREE.CylinderGeometry(0.57, 0.57, 0.3, 20), blue);
+        lip.rotation.x = Math.PI / 2;
+        lip.position.set(0, 0, 1.35);
+        nac.add(lip);
+        const intake = new THREE.Mesh(new THREE.CircleGeometry(0.48, 20), dark);
+        intake.position.set(0, 0, 1.51);
+        nac.add(intake);
+        const pylon = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.55, 1.4), white);
+        pylon.position.set(0, 0.45, -0.2);
+        nac.add(pylon);
+        nac.position.set(side * ex, -1.35, ez);
+        planeGroup.add(nac);
+      }
     }
-    // Fin: tall, swept-back, extruded shape with a rounded top, red with
-    // a black band — a real aircraft silhouette, not a stub. The sweep
-    // runs back along the tail so the fin reads tall from the rear chase
-    // view and from the title hero shot.
+    // Tail fin: tall, swept, RED with a blue band — the A380 tail.
     const finShape = new THREE.Shape();
     finShape.moveTo(0, 0);
-    finShape.lineTo(0, 2.5);
-    finShape.quadraticCurveTo(0.15, 2.85, 0.7, 2.75);
-    finShape.lineTo(1.9, 0.3);
-    finShape.quadraticCurveTo(1.95, 0.1, 1.7, 0);
+    finShape.lineTo(0, 2.9);
+    finShape.quadraticCurveTo(0.2, 3.2, 0.8, 3.1);
+    finShape.lineTo(2.5, 0.4);
+    finShape.quadraticCurveTo(2.55, 0.15, 2.3, 0);
     finShape.closePath();
     const finGeo = new THREE.ExtrudeGeometry(finShape, {
-      depth: 0.2, bevelEnabled: true, bevelThickness: 0.09, bevelSize: 0.09, bevelSegments: 3,
+      depth: 0.3, bevelEnabled: true, bevelThickness: 0.08, bevelSize: 0.08, bevelSegments: 3,
     });
-    finGeo.translate(0, 0, -0.1);
+    finGeo.translate(0, 0, -0.15);
     const fin = new THREE.Mesh(finGeo, red);
     fin.rotation.y = Math.PI / 2;
-    fin.position.set(0, 0.45, -3.55);
+    fin.position.set(0, 0.6, -4.6);
     fin.castShadow = true;
     planeGroup.add(fin);
-    const finBand = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.28, 1.0), black);
-    finBand.position.set(0, 1.1, -4.35);
+    // Blue + white bands across the fin: they break the big red slab so
+    // the tail reads as a livery, not a paddle, from the side.
+    const finBand = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.9, 1.6), blue);
+    finBand.position.set(0, 2.3, -5.5);
     planeGroup.add(finBand);
-    for (const side of [-1, 1]) {
-      const roundel = new THREE.Mesh(
-        new THREE.CircleGeometry(0.5, 20),
-        new THREE.MeshStandardMaterial({ color: 0xfff3c4, roughness: 0.6 }),
-      );
-      roundel.position.set(side * 0.13, 1.6, -4.4);
-      roundel.rotation.y = side * Math.PI / 2;
-      planeGroup.add(roundel);
-      const dot = new THREE.Mesh(
-        new THREE.CircleGeometry(0.24, 16),
-        new THREE.MeshStandardMaterial({ color: 0x1e3a5f, roughness: 0.6 }),
-      );
-      dot.position.set(side * 0.14, 1.6, -4.4);
-      dot.rotation.y = side * Math.PI / 2;
-      planeGroup.add(dot);
-    }
-    // Canopy glass: bigger and glossier — a proper bubble canopy that
-    // catches the sun, not a small dark dome.
-    const canopy = new THREE.Mesh(new THREE.SphereGeometry(1.05, 24, 18, 0, Math.PI * 2, 0, Math.PI / 2), glassMat);
-    canopy.scale.set(1.15, 0.85, 2.1);
-    canopy.position.set(0, 0.5, 1.2);
-    planeGroup.add(canopy);
-    // Propeller: three slim pale blades spinning around the nose axis.
-    // Thin + light grey on purpose: the old thick dark-grey blades read as
-    // a black starburst against the bright cloud sea in the title shot.
-    propGroup = new THREE.Group();
-    propGroup.position.set(0, 0, 5.55);
-    const hub = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.9, 16), dark);
-    hub.rotation.x = Math.PI / 2;
-    propGroup.add(hub);
-    propMat = new THREE.MeshStandardMaterial({ color: 0x8f8f8f, roughness: 0.55 });
-    for (let b = 0; b < 3; b += 1) {
-      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.09, 4.6, 0.06), propMat);
-      blade.rotation.z = (b / 3) * Math.PI * 2;
-      propGroup.add(blade);
-    }
-    // No translucent prop disc: with the closer chase camera (round 2) the
-    // disc read as a giant grey balloon / radar dish behind the fuselage.
-    // The three blades + hub alone read fine at speed.
-    planeGroup.add(propGroup);
-    // Landing gear.
+    const finBandW = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.9, 1.6), white);
+    finBandW.position.set(0, 1.5, -5.5);
+    planeGroup.add(finBandW);
+    // Landing gear (retractable: hidden when gear is up).
     gearGroup = new THREE.Group();
     for (const side of [-1, 1]) {
       const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.7, 6), dark);
@@ -1044,16 +1174,24 @@ export function createRenderer3D(canvas, world, hooks) {
       wheel.position.set(side * 0.9, -1.5, 1.2);
       gearGroup.add(wheel);
     }
+    // Nose gear: single wheel under the nose.
+    const noseStrut = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.7, 6), dark);
+    noseStrut.position.set(0, -1.25, 4.8);
+    gearGroup.add(noseStrut);
+    const noseWheel = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.3, 20), dark);
+    noseWheel.rotation.z = Math.PI / 2;
+    noseWheel.position.set(0, -1.55, 4.8);
+    gearGroup.add(noseWheel);
     planeGroup.add(gearGroup);
     // Wingtip lights: red left, green right, white strobe on the tail.
     const tipL = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 8), new THREE.MeshStandardMaterial({ color: 0xff4d4d, emissive: 0xff2020, emissiveIntensity: 1.4 }));
-    tipL.position.set(-7.4, -0.55, 0.6);
+    tipL.position.set(-8.3, -0.55, -2.0);
     planeGroup.add(tipL);
     const tipR = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 8), new THREE.MeshStandardMaterial({ color: 0x4dff88, emissive: 0x20ff60, emissiveIntensity: 1.4 }));
-    tipR.position.set(7.4, -0.55, 0.6);
+    tipR.position.set(8.3, -0.55, -2.0);
     planeGroup.add(tipR);
     strobe = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 2 }));
-    strobe.position.set(0, 0.4, -5.2);
+    strobe.position.set(0, 0.5, -7.6);
     planeGroup.add(strobe);
   }
   scene.add(planeGroup);
@@ -1569,11 +1707,10 @@ export function createRenderer3D(canvas, world, hooks) {
     }
     if (titleView) {
       // Hero shot (title only): the camera sits ahead and to the side, low,
-      // looking BACK at the plane as it climbs away from home — the plane
-      // is BIG in the foreground now (camera ~22 m out instead of ~33 m,
-      // so the livery, canopy and tall fin actually read), its home island
-      // + red-roof village + runway behind it, cloud sea below, sunset
-      // sky above. The chase camera below is untouched.
+      // looking BACK at the jet as it climbs away from home — the jet is
+      // BIG in the foreground (camera ~22 m out, so the livery, windows
+      // and tail actually read), its home airport + city + runway behind
+      // it, blue sky above. The chase camera below is untouched.
       const pos = {
         x: plane.x + fx * 18 + Math.cos(h) * 13,
         y: plane.y + 3,
@@ -1582,13 +1719,13 @@ export function createRenderer3D(canvas, world, hooks) {
       const look = { x: plane.x, y: plane.y + 1, z: plane.z };
       return { pos, look };
     }
-    // Ref 3 composition: the chase camera sits higher and looks DOWN at the
-    // cloud sea instead of level at the horizon — the frame is mostly cloud
-    // sea below with the plane, the horizon rides at the very top like the
-    // photo, and the rings (at flight height, ahead) stay in frame near
-    // the top. The camera never drops near the terrain.
-    const back = 16;
-    const camUp = 11;
+    // Chase (Flight Sim 2018): tail-on from behind-above, the jet's full
+    // wingspan in frame. The jet is longer than the old tourer, so the
+    // camera sits further back and higher; it looks down at the city and
+    // cloud sea below, the horizon rides at the top, and the rings (at
+    // flight height, ahead) stay in frame near the top.
+    const back = 20;
+    const camUp = 12;
     const ahead = 26;
     const side = 0;
     const pos = {
@@ -1620,11 +1757,11 @@ export function createRenderer3D(canvas, world, hooks) {
       camera.updateProjectionMatrix();
     }
 
-    // Title dressing: richer Golden Hour on the hero shot only — a warmer,
-    // stronger sun and a touch more exposure so the plane glows against the
-    // cloud sea. Chase/cockpit rendering is untouched.
-    renderer.toneMappingExposure = titleView ? 1.28 : 1.12;
-    sun.intensity = titleView ? 3.6 : 2.8;
+    // Title dressing: a touch more sun and exposure on the hero shot only,
+    // so the jet glows against the blue sky. Chase/cockpit rendering is
+    // untouched.
+    renderer.toneMappingExposure = titleView ? 1.3 : 1.18;
+    sun.intensity = titleView ? 3.8 : 3.2;
 
     // Goals follow the current mission.
     const ringStates = mission.id === 'rings' ? mission.rings.map((r) => (r.passed ? '1' : '0')).join('') : '';
@@ -1669,21 +1806,13 @@ export function createRenderer3D(canvas, world, hooks) {
 
     // The aircraft (visual model rides 1.9 m above the physics origin).
     planeGroup.position.set(plane.x, plane.y + PLANE_LIFT, plane.z);
-    planeGroup.rotation.set(-plane.pitch, plane.heading, -plane.bank, 'YXZ');
-    // Title (hero) shot only: park the prop — one blade straight up,
-    // smaller and paler, so it never reads as a black starburst against the
-    // bright cloud sea. The title camera looks straight at the nose, which
-    // is why the spinning dark prop dominated 1-start. Chase views keep
-    // the spinning prop untouched (thin X from behind).
-    if (titleView) {
-      propGroup.rotation.z = 0;
-      propGroup.scale.setScalar(0.72);
-      propMat.color.setHex(0xb0b0b0);
-    } else {
-      propGroup.rotation.z = plane.propAngle;
-      propGroup.scale.setScalar(1);
-      propMat.color.setHex(0x8f8f8f);
-    }
+    // Title (hero) shot only: bank the visual model ~18° so the hero pose
+    // reads dynamic like AERIS, not level. Cycle 1 used 28° — too steep
+    // with the close camera, the wing sliced the frame and the plane
+    // looked like it was falling. Physics bank is untouched; chase and
+    // cockpit views use the real bank.
+    const heroBank = titleView ? -0.32 : 0;
+    planeGroup.rotation.set(-plane.pitch, plane.heading, -plane.bank + heroBank, 'YXZ');
     gearGroup.visible = plane.gearDown;
     strobe.visible = Math.floor(time * 1.4) % 2 === 0;
 
