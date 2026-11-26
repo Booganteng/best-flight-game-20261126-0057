@@ -662,15 +662,16 @@ export function createRenderer3D(canvas, world, hooks) {
     const blobs = [];
     // Blobs spread over the canvas but LEAVE REAL GAPS: fewer, smaller
     // blobs, so each deck quad carries transparent blue gaps between the
-    // puffs instead of full-coverage white. (Thinner clouds, tuan muda:
-    // "awannya kurang tipis" — the sea must read light and airy, with blue
-    // showing through, like ref 3. Full-coverage texture + stacked
-    // 0.92/0.72 decks saturated to a solid white blanket.)
-    for (let i = 0; i < 11; i += 1) {
+    // puffs instead of full-coverage white. (Ground-visible pass, tuan muda:
+    // "biar pemandangan bawahnya kelihatan" — the sea, islands and villages
+    // below must read through the gaps, like ref 3. Only 8 small blobs
+    // with a lower peak alpha, so a quad is mostly transparent sky/sea
+    // with scattered white billows, not a white sheet.)
+    for (let i = 0; i < 8; i += 1) {
       blobs.push({
         x: 40 + trng() * 432,
         y: 40 + trng() * 432,
-        r: range(trng, 90, 170),
+        r: range(trng, 70, 130),
       });
     }
     // Cool shadow under-lumps first, then the white tops.
@@ -683,8 +684,8 @@ export function createRenderer3D(canvas, world, hooks) {
     }
     for (const b of blobs) {
       const grad = g.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
-      grad.addColorStop(0, 'rgba(255, 253, 246, 0.95)');
-      grad.addColorStop(0.6, 'rgba(252, 250, 246, 0.8)');
+      grad.addColorStop(0, 'rgba(255, 253, 246, 0.85)');
+      grad.addColorStop(0.6, 'rgba(252, 250, 246, 0.7)');
       grad.addColorStop(1, 'rgba(252, 250, 246, 0)');
       g.fillStyle = grad;
       g.fillRect(0, 0, 512, 512);
@@ -707,16 +708,15 @@ export function createRenderer3D(canvas, world, hooks) {
   const cloudTex = makeCloudTexture();
 
   // The deck: one InstancedMesh of large flat soft-textured quads at
-  // y 32-42. THIN clouds (tuan muda: "awannya kurang tipis"): the deck is
-  // a light, airy layer now — opacity 0.75, spacing 210 with quads
-  // 280-380 (lightly overlapping), so blue sea shows through the gaps
-  // between puffs like ref 3, instead of a solid white blanket. Too much
-  // overlap saturates the alpha to a featureless white sheet; too little
-  // leaves the sea bare. The deck sits LOW so the red-roof villages
-  // (25-46 m up the island slopes) poke through it instead of drowning
-  // under it, and it is cleared around the three runway islands so
-  // takeoffs and landings stay in clear air. Densest in the ring
-  // corridor (Harbour -> Coral -> Turtle).
+  // y 32-42. GROUND-VISIBLE pass (tuan muda: "biar pemandangan bawahnya
+  // kelihatan"): the deck is a thin, holey layer now — opacity 0.55,
+  // spacing 290 with quads 220-320 (gaps wider than the quads, so the blue
+  // sea + islands + villages below read clearly between the puffs), and
+  // 0.7 skipped outside the ring corridor. The deck sits LOW so the
+  // red-roof villages (25-46 m up the island slopes) poke through it
+  // instead of drowning under it, and it is cleared around the three
+  // runway islands so takeoffs and landings stay in clear air. Densest in
+  // the ring corridor (Harbour -> Coral -> Turtle).
   // The deck is static (a sea does not drift); only the sprites above it
   // drift, via the `clouds` list the frame loop already animates.
   const clouds = [];
@@ -724,7 +724,7 @@ export function createRenderer3D(canvas, world, hooks) {
     const rng = mulberry32(world.seed + 31337);
     const deckGeo = new THREE.PlaneGeometry(1, 1);
     const deckMat = new THREE.MeshBasicMaterial({
-      map: cloudTex, transparent: true, depthWrite: false, opacity: 0.75,
+      map: cloudTex, transparent: true, depthWrite: false, opacity: 0.55,
     });
     const clearOfRunways = (x, z) => {
       for (const [cx, cz, cr] of [[0, 0, 540], [1250, 700, 500], [-1250, 950, 500]]) {
@@ -733,16 +733,16 @@ export function createRenderer3D(canvas, world, hooks) {
       return true;
     };
     const spots = [];
-    for (let gx = -3000; gx <= 3000; gx += 210) {
-      for (let gz = -3000; gz <= 3000; gz += 210) {
+    for (let gx = -3000; gx <= 3000; gx += 290) {
+      for (let gz = -3000; gz <= 3000; gz += 290) {
         const inCorridor = gx > -1900 && gx < 400 && gz > -1900 && gz < 400;
-        if (!inCorridor && rng() < 0.45) continue;
+        if (!inCorridor && rng() < 0.7) continue;
         const x = gx + range(rng, -70, 70);
         const z = gz + range(rng, -70, 70);
         if (!clearOfRunways(x, z)) continue;
         if (world.groundHeight(x, z) > 18) continue;
         spots.push({
-          x, z, y: 32 + rng() * 10, s: range(rng, 280, 380), rot: rng() * Math.PI,
+          x, z, y: 32 + rng() * 10, s: range(rng, 220, 320), rot: rng() * Math.PI,
         });
       }
     }
@@ -767,25 +767,25 @@ export function createRenderer3D(canvas, world, hooks) {
     // silhouette and no shaded flank, so from the chase camera it reads as
     // a soft puff, and overlapping puffs at two heights give the sea its
     // rolling relief. Same clearances as the base deck so islands +
-    // villages still poke through instead of drowning. THIN pass: opacity
-    // 0.48, spacing 260, smaller quads 180-300, sparser outside the
-    // corridor — the puffs are scattered billows with blue between them,
-    // not a second white sheet.
+    // villages still poke through instead of drowning. GROUND-VISIBLE
+    // pass: opacity 0.45, spacing 280, smaller quads 150-260, sparser
+    // outside the corridor — the puffs are scattered billows with wide
+    // blue gaps between them, not a second white sheet.
     const puffGeo = new THREE.PlaneGeometry(1, 1);
     const puffMat = new THREE.MeshBasicMaterial({
-      map: cloudTex, transparent: true, depthWrite: false, opacity: 0.62,
+      map: cloudTex, transparent: true, depthWrite: false, opacity: 0.45,
     });
     const puffSpots = [];
-    for (let gx = -3000; gx <= 3000; gx += 220) {
-      for (let gz = -3000; gz <= 3000; gz += 220) {
+    for (let gx = -3000; gx <= 3000; gx += 280) {
+      for (let gz = -3000; gz <= 3000; gz += 280) {
         const inCorridor = gx > -1900 && gx < 400 && gz > -1900 && gz < 400;
-        if (!inCorridor && rng() < 0.6) continue;
+        if (!inCorridor && rng() < 0.75) continue;
         const x = gx + range(rng, -70, 70);
         const z = gz + range(rng, -70, 70);
         if (!clearOfRunways(x, z)) continue;
         if (world.groundHeight(x, z) > 18) continue;
         puffSpots.push({
-          x, z, y: 42 + rng() * 12, s: range(rng, 200, 330), rot: rng() * Math.PI,
+          x, z, y: 42 + rng() * 12, s: range(rng, 150, 260), rot: rng() * Math.PI,
         });
       }
     }
@@ -817,11 +817,11 @@ export function createRenderer3D(canvas, world, hooks) {
   }
   // Soft lumps riding on the deck itself, for billowy relief in the chase
   // view; plus four towering cumulus columns for the layered sky.
-  // THIN pass: 80 -> 48 lumps, opacity 0.9 -> 0.72 — fewer, lighter
-  // billows so the sea stays airy instead of filling white again.
+  // GROUND-VISIBLE pass: 60 -> 35 lumps, opacity 0.8 -> 0.6 — fewer,
+  // lighter billows so the ground below stays visible through the gaps.
   {
     const rng = mulberry32(world.seed + 7777);
-    for (let i = 0; i < 60; i += 1) {
+    for (let i = 0; i < 35; i += 1) {
       let x;
       let z;
       if (rng() < 0.65) {
@@ -834,7 +834,7 @@ export function createRenderer3D(canvas, world, hooks) {
       if (world.groundHeight(x, z) > 18) continue;
       if (Math.hypot(x, z) < 540) continue;
       const spr = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: cloudTex, transparent: true, depthWrite: false, opacity: 0.8,
+        map: cloudTex, transparent: true, depthWrite: false, opacity: 0.6,
       }));
       spr.position.set(x, 46 + rng() * 18, z);
       spr.scale.set(range(rng, 120, 240), range(rng, 60, 110), 1);
@@ -919,7 +919,7 @@ export function createRenderer3D(canvas, world, hooks) {
     const red = new THREE.MeshStandardMaterial({ color: DAY.planeRed, roughness: 0.45, metalness: 0.05, side: THREE.DoubleSide });
     const black = new THREE.MeshStandardMaterial({ color: DAY.planeBlack, roughness: 0.6 });
     const glassMat = new THREE.MeshStandardMaterial({
-      color: DAY.glass, roughness: 0.15, metalness: 0.4, transparent: true, opacity: 0.9,
+      color: DAY.glass, roughness: 0.05, metalness: 0.7, transparent: true, opacity: 0.95,
     });
     const dark = new THREE.MeshStandardMaterial({ color: 0x2b2b2b, roughness: 0.7 });
 
@@ -927,9 +927,11 @@ export function createRenderer3D(canvas, world, hooks) {
     fuselage.rotation.x = Math.PI / 2;
     fuselage.castShadow = true;
     planeGroup.add(fuselage);
-    // Blue cheatline along each flank.
+    // Blue cheatline along each flank — thick and long, running from the
+    // nose all the way back into the red tail band, so the livery reads
+    // from any angle.
     for (const side of [-1, 1]) {
-      const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.3, 4.6), blue);
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.5, 7.0), blue);
       stripe.position.set(side * 1.0, 0.05, 0.2);
       planeGroup.add(stripe);
     }
@@ -958,8 +960,8 @@ export function createRenderer3D(canvas, world, hooks) {
       wing.rotation.z = side * 0.06;
       wing.castShadow = true;
       planeGroup.add(wing);
-      // Blue tip stripe.
-      const tip = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 1.0), blue);
+      // Red wingtip caps — the blue cheatline's counterpart at the tips.
+      const tip = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 1.0), red);
       tip.position.set(side * 7.2, -0.55, 0.6);
       planeGroup.add(tip);
       const tailplane = new THREE.Mesh(wingGeometry(2.9, 1.15, 0.8), white);
@@ -968,14 +970,16 @@ export function createRenderer3D(canvas, world, hooks) {
       tailplane.castShadow = true;
       planeGroup.add(tailplane);
     }
-    // Fin: extruded swept shape with a rounded top, red with a black band.
-    // Kept compact so it does not dominate the rear view.
+    // Fin: tall, swept-back, extruded shape with a rounded top, red with
+    // a black band — a real aircraft silhouette, not a stub. The sweep
+    // runs back along the tail so the fin reads tall from the rear chase
+    // view and from the title hero shot.
     const finShape = new THREE.Shape();
     finShape.moveTo(0, 0);
-    finShape.lineTo(0, 1.7);
-    finShape.quadraticCurveTo(0.1, 2.0, 0.5, 1.95);
-    finShape.lineTo(1.25, 0.3);
-    finShape.quadraticCurveTo(1.3, 0.1, 1.1, 0);
+    finShape.lineTo(0, 2.5);
+    finShape.quadraticCurveTo(0.15, 2.85, 0.7, 2.75);
+    finShape.lineTo(1.9, 0.3);
+    finShape.quadraticCurveTo(1.95, 0.1, 1.7, 0);
     finShape.closePath();
     const finGeo = new THREE.ExtrudeGeometry(finShape, {
       depth: 0.2, bevelEnabled: true, bevelThickness: 0.09, bevelSize: 0.09, bevelSegments: 3,
@@ -987,28 +991,29 @@ export function createRenderer3D(canvas, world, hooks) {
     fin.castShadow = true;
     planeGroup.add(fin);
     const finBand = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.28, 1.0), black);
-    finBand.position.set(0, 0.85, -4.3);
+    finBand.position.set(0, 1.1, -4.35);
     planeGroup.add(finBand);
     for (const side of [-1, 1]) {
       const roundel = new THREE.Mesh(
         new THREE.CircleGeometry(0.5, 20),
         new THREE.MeshStandardMaterial({ color: 0xfff3c4, roughness: 0.6 }),
       );
-      roundel.position.set(side * 0.13, 1.35, -4.25);
+      roundel.position.set(side * 0.13, 1.6, -4.4);
       roundel.rotation.y = side * Math.PI / 2;
       planeGroup.add(roundel);
       const dot = new THREE.Mesh(
         new THREE.CircleGeometry(0.24, 16),
         new THREE.MeshStandardMaterial({ color: 0x1e3a5f, roughness: 0.6 }),
       );
-      dot.position.set(side * 0.14, 1.35, -4.25);
+      dot.position.set(side * 0.14, 1.6, -4.4);
       dot.rotation.y = side * Math.PI / 2;
       planeGroup.add(dot);
     }
-    // Canopy glass.
-    const canopy = new THREE.Mesh(new THREE.SphereGeometry(0.95, 24, 18, 0, Math.PI * 2, 0, Math.PI / 2), glassMat);
-    canopy.scale.set(1, 0.7, 1.8);
-    canopy.position.set(0, 0.55, 1.3);
+    // Canopy glass: bigger and glossier — a proper bubble canopy that
+    // catches the sun, not a small dark dome.
+    const canopy = new THREE.Mesh(new THREE.SphereGeometry(1.05, 24, 18, 0, Math.PI * 2, 0, Math.PI / 2), glassMat);
+    canopy.scale.set(1.15, 0.85, 2.1);
+    canopy.position.set(0, 0.5, 1.2);
     planeGroup.add(canopy);
     // Propeller: three slim pale blades spinning around the nose axis.
     // Thin + light grey on purpose: the old thick dark-grey blades read as
@@ -1565,13 +1570,14 @@ export function createRenderer3D(canvas, world, hooks) {
     if (titleView) {
       // Hero shot (title only): the camera sits ahead and to the side, low,
       // looking BACK at the plane as it climbs away from home — the plane
-      // is big in the foreground, its home island + red-roof village +
-      // runway behind it, cloud sea below, sunset sky above. The chase
-      // camera below is untouched.
+      // is BIG in the foreground now (camera ~22 m out instead of ~33 m,
+      // so the livery, canopy and tall fin actually read), its home island
+      // + red-roof village + runway behind it, cloud sea below, sunset
+      // sky above. The chase camera below is untouched.
       const pos = {
-        x: plane.x + fx * 26 + Math.cos(h) * 20,
-        y: plane.y + 4,
-        z: plane.z + fz * 26 - Math.sin(h) * 20,
+        x: plane.x + fx * 18 + Math.cos(h) * 13,
+        y: plane.y + 3,
+        z: plane.z + fz * 18 - Math.sin(h) * 13,
       };
       const look = { x: plane.x, y: plane.y + 1, z: plane.z };
       return { pos, look };
