@@ -663,17 +663,17 @@ export function createRenderer3D(canvas, world, hooks) {
     // Blobs spread over the WHOLE canvas (centres to the edges, radii
     // large) so every part of a deck quad carries cloud alpha — a texture
     // whose corners are transparent leaves hard-edged blue gaps in the sea.
-    for (let i = 0; i < 24; i += 1) {
+    for (let i = 0; i < 14; i += 1) {
       blobs.push({
         x: 40 + trng() * 432,
         y: 40 + trng() * 432,
-        r: range(trng, 80, 170),
+        r: range(trng, 110, 210),
       });
     }
     // Cool shadow under-lumps first, then the white tops.
     for (const b of blobs) {
       const grad = g.createRadialGradient(b.x, b.y + 14, 0, b.x, b.y + 14, b.r);
-      grad.addColorStop(0, 'rgba(158, 178, 198, 0.24)');
+      grad.addColorStop(0, 'rgba(158, 178, 198, 0.2)');
       grad.addColorStop(1, 'rgba(158, 178, 198, 0)');
       g.fillStyle = grad;
       g.fillRect(0, 0, 512, 512);
@@ -755,50 +755,44 @@ export function createRenderer3D(canvas, world, hooks) {
     deck.renderOrder = 2;
     scene.add(deck);
 
-    // Mound layer (ref 3, final push): real 3D relief on the cloud sea.
-    // The flat deck alone reads as a white carpet from the chase view, so
-    // these smooth flattened domes sit on top of it and give it hills —
-    // bright warm sunlit tops, soft blue-grey valleys where the domes
-    // overlap, exactly like the photo. The grading is real light (warm sun
-    // + cool hemisphere), not painted texture. Same clearances as the deck
-    // so islands + villages still poke through the sea instead of drowning.
-    const moundGeo = new THREE.SphereGeometry(1, 16, 12);
-    const moundMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0 });
-    const moundSpots = [];
-    for (let gx = -3000; gx <= 3000; gx += 130) {
-      for (let gz = -3000; gz <= 3000; gz += 130) {
+    // Puff layer (ice-rock fix): the solid mound domes are GONE — as solid
+    // shaded 3D shapes they read as ice rocks / boulders, not clouds
+    // ("batu es"). The billow comes back from soft texture only: a second
+    // flat deck of smaller feathered quads riding 10-20 m above the base
+    // deck, denser in the ring corridor. A flat quad has no solid
+    // silhouette and no shaded flank, so from the chase camera it reads as
+    // a soft puff, and overlapping puffs at two heights give the sea its
+    // rolling relief. Same clearances as the base deck so islands +
+    // villages still poke through instead of drowning.
+    const puffGeo = new THREE.PlaneGeometry(1, 1);
+    const puffMat = new THREE.MeshBasicMaterial({
+      map: cloudTex, transparent: true, depthWrite: false, opacity: 0.72,
+    });
+    const puffSpots = [];
+    for (let gx = -3000; gx <= 3000; gx += 190) {
+      for (let gz = -3000; gz <= 3000; gz += 190) {
         const inCorridor = gx > -1900 && gx < 400 && gz > -1900 && gz < 400;
-        if (!inCorridor && rng() < 0.5) continue;
-        const x = gx + range(rng, -45, 45);
-        const z = gz + range(rng, -45, 45);
+        if (!inCorridor && rng() < 0.45) continue;
+        const x = gx + range(rng, -70, 70);
+        const z = gz + range(rng, -70, 70);
         if (!clearOfRunways(x, z)) continue;
         if (world.groundHeight(x, z) > 18) continue;
-        moundSpots.push({
-          x, z, y: 36 + rng() * 10,
-          rx: range(rng, 45, 95), ry: range(rng, 8, 20), rz: range(rng, 40, 85),
+        puffSpots.push({
+          x, z, y: 42 + rng() * 12, s: range(rng, 220, 380), rot: rng() * Math.PI,
         });
       }
     }
-    const mounds = new THREE.InstancedMesh(moundGeo, moundMat, moundSpots.length);
-    const mcol = new THREE.Color();
-    moundSpots.forEach((p, i) => {
+    const puffs = new THREE.InstancedMesh(puffGeo, puffMat, puffSpots.length);
+    puffSpots.forEach((p, i) => {
       dummy.position.set(p.x, p.y, p.z);
-      dummy.rotation.set(0, rng() * Math.PI, 0);
-      dummy.scale.set(p.rx, p.ry, p.rz);
+      dummy.rotation.set(-Math.PI / 2, 0, p.rot);
+      dummy.scale.set(p.s, p.s * range(rng, 0.7, 1), 1);
       dummy.updateMatrix();
-      mounds.setMatrixAt(i, dummy.matrix);
-      // Subtle per-mound tint: mostly pure white, some warm sunlit, some cool.
-      const t = rng();
-      if (t < 0.25) mcol.setHex(0xfff6e6);
-      else if (t < 0.45) mcol.setHex(0xdde8f2);
-      else mcol.setHex(0xffffff);
-      mounds.setColorAt(i, mcol);
+      puffs.setMatrixAt(i, dummy.matrix);
     });
-    mounds.instanceMatrix.needsUpdate = true;
-    if (mounds.instanceColor) mounds.instanceColor.needsUpdate = true;
-    mounds.castShadow = false;
-    mounds.receiveShadow = false;
-    scene.add(mounds);
+    puffs.instanceMatrix.needsUpdate = true;
+    puffs.renderOrder = 3;
+    scene.add(puffs);
   }
 
   // High clouds: soft billboard sprites with the same feathered texture —
@@ -818,7 +812,7 @@ export function createRenderer3D(canvas, world, hooks) {
   // view; plus four towering cumulus columns for the layered sky.
   {
     const rng = mulberry32(world.seed + 7777);
-    for (let i = 0; i < 42; i += 1) {
+    for (let i = 0; i < 80; i += 1) {
       let x;
       let z;
       if (rng() < 0.65) {
@@ -907,6 +901,7 @@ export function createRenderer3D(canvas, world, hooks) {
   const PLANE_LIFT = 1.9;
   const planeGroup = new THREE.Group();
   let propGroup;
+  let propMat;
   let gearGroup;
   let strobe;
   {
@@ -1006,16 +1001,17 @@ export function createRenderer3D(canvas, world, hooks) {
     canopy.scale.set(1, 0.7, 1.8);
     canopy.position.set(0, 0.55, 1.3);
     planeGroup.add(canopy);
-    // Propeller: three slim blades + a faint translucent disc, spins around
-    // the nose axis (a solid black star read as a cartoon asterisk).
+    // Propeller: three slim pale blades spinning around the nose axis.
+    // Thin + light grey on purpose: the old thick dark-grey blades read as
+    // a black starburst against the bright cloud sea in the title shot.
     propGroup = new THREE.Group();
     propGroup.position.set(0, 0, 5.55);
     const hub = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.9, 16), dark);
     hub.rotation.x = Math.PI / 2;
     propGroup.add(hub);
-    const propMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.6 });
+    propMat = new THREE.MeshStandardMaterial({ color: 0x8f8f8f, roughness: 0.55 });
     for (let b = 0; b < 3; b += 1) {
-      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.14, 4.6, 0.08), propMat);
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.09, 4.6, 0.06), propMat);
       blade.rotation.z = (b / 3) * Math.PI * 2;
       propGroup.add(blade);
     }
@@ -1659,7 +1655,20 @@ export function createRenderer3D(canvas, world, hooks) {
     // The aircraft (visual model rides 1.9 m above the physics origin).
     planeGroup.position.set(plane.x, plane.y + PLANE_LIFT, plane.z);
     planeGroup.rotation.set(-plane.pitch, plane.heading, -plane.bank, 'YXZ');
-    propGroup.rotation.z = plane.propAngle;
+    // Title (hero) shot only: park the prop — one blade straight up,
+    // smaller and paler, so it never reads as a black starburst against the
+    // bright cloud sea. The title camera looks straight at the nose, which
+    // is why the spinning dark prop dominated 1-start. Chase views keep
+    // the spinning prop untouched (thin X from behind).
+    if (titleView) {
+      propGroup.rotation.z = 0;
+      propGroup.scale.setScalar(0.72);
+      propMat.color.setHex(0xb0b0b0);
+    } else {
+      propGroup.rotation.z = plane.propAngle;
+      propGroup.scale.setScalar(1);
+      propMat.color.setHex(0x8f8f8f);
+    }
     gearGroup.visible = plane.gearDown;
     strobe.visible = Math.floor(time * 1.4) % 2 === 0;
 
