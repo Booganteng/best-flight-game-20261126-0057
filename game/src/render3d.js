@@ -660,14 +660,17 @@ export function createRenderer3D(canvas, world, hooks) {
     const g = c.getContext('2d');
     const trng = mulberry32(world.seed + 5150);
     const blobs = [];
-    // Blobs spread over the WHOLE canvas (centres to the edges, radii
-    // large) so every part of a deck quad carries cloud alpha — a texture
-    // whose corners are transparent leaves hard-edged blue gaps in the sea.
-    for (let i = 0; i < 14; i += 1) {
+    // Blobs spread over the canvas but LEAVE REAL GAPS: fewer, smaller
+    // blobs, so each deck quad carries transparent blue gaps between the
+    // puffs instead of full-coverage white. (Thinner clouds, tuan muda:
+    // "awannya kurang tipis" — the sea must read light and airy, with blue
+    // showing through, like ref 3. Full-coverage texture + stacked
+    // 0.92/0.72 decks saturated to a solid white blanket.)
+    for (let i = 0; i < 11; i += 1) {
       blobs.push({
         x: 40 + trng() * 432,
         y: 40 + trng() * 432,
-        r: range(trng, 110, 210),
+        r: range(trng, 90, 170),
       });
     }
     // Cool shadow under-lumps first, then the white tops.
@@ -680,8 +683,8 @@ export function createRenderer3D(canvas, world, hooks) {
     }
     for (const b of blobs) {
       const grad = g.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
-      grad.addColorStop(0, 'rgba(255, 253, 246, 0.98)');
-      grad.addColorStop(0.6, 'rgba(252, 250, 246, 0.85)');
+      grad.addColorStop(0, 'rgba(255, 253, 246, 0.95)');
+      grad.addColorStop(0.6, 'rgba(252, 250, 246, 0.8)');
       grad.addColorStop(1, 'rgba(252, 250, 246, 0)');
       g.fillStyle = grad;
       g.fillRect(0, 0, 512, 512);
@@ -704,15 +707,16 @@ export function createRenderer3D(canvas, world, hooks) {
   const cloudTex = makeCloudTexture();
 
   // The deck: one InstancedMesh of large flat soft-textured quads at
-  // y 32-42, overlapping just enough that the chase view sees a white sea
-  // of distinct soft puffs with shadowed valleys between them — the plane
-  // flies above it, exactly like ref 3. Too much overlap saturates the
-  // alpha to a featureless white sheet (cycle 2), too little leaves blue
-  // holes (cycle 1): spacing 200 with quads 240-360 is the middle. The
-  // deck sits LOW so the red-roof villages (25-46 m up the island slopes)
-  // poke through it instead of drowning under it, and it is cleared
-  // around the three runway islands so takeoffs and landings stay in
-  // clear air. Densest in the ring corridor (Harbour -> Coral -> Turtle).
+  // y 32-42. THIN clouds (tuan muda: "awannya kurang tipis"): the deck is
+  // a light, airy layer now — opacity 0.75, spacing 210 with quads
+  // 280-380 (lightly overlapping), so blue sea shows through the gaps
+  // between puffs like ref 3, instead of a solid white blanket. Too much
+  // overlap saturates the alpha to a featureless white sheet; too little
+  // leaves the sea bare. The deck sits LOW so the red-roof villages
+  // (25-46 m up the island slopes) poke through it instead of drowning
+  // under it, and it is cleared around the three runway islands so
+  // takeoffs and landings stay in clear air. Densest in the ring
+  // corridor (Harbour -> Coral -> Turtle).
   // The deck is static (a sea does not drift); only the sprites above it
   // drift, via the `clouds` list the frame loop already animates.
   const clouds = [];
@@ -720,7 +724,7 @@ export function createRenderer3D(canvas, world, hooks) {
     const rng = mulberry32(world.seed + 31337);
     const deckGeo = new THREE.PlaneGeometry(1, 1);
     const deckMat = new THREE.MeshBasicMaterial({
-      map: cloudTex, transparent: true, depthWrite: false, opacity: 0.92,
+      map: cloudTex, transparent: true, depthWrite: false, opacity: 0.75,
     });
     const clearOfRunways = (x, z) => {
       for (const [cx, cz, cr] of [[0, 0, 540], [1250, 700, 500], [-1250, 950, 500]]) {
@@ -729,8 +733,8 @@ export function createRenderer3D(canvas, world, hooks) {
       return true;
     };
     const spots = [];
-    for (let gx = -3000; gx <= 3000; gx += 180) {
-      for (let gz = -3000; gz <= 3000; gz += 180) {
+    for (let gx = -3000; gx <= 3000; gx += 210) {
+      for (let gz = -3000; gz <= 3000; gz += 210) {
         const inCorridor = gx > -1900 && gx < 400 && gz > -1900 && gz < 400;
         if (!inCorridor && rng() < 0.45) continue;
         const x = gx + range(rng, -70, 70);
@@ -738,7 +742,7 @@ export function createRenderer3D(canvas, world, hooks) {
         if (!clearOfRunways(x, z)) continue;
         if (world.groundHeight(x, z) > 18) continue;
         spots.push({
-          x, z, y: 32 + rng() * 10, s: range(rng, 280, 420), rot: rng() * Math.PI,
+          x, z, y: 32 + rng() * 10, s: range(rng, 280, 380), rot: rng() * Math.PI,
         });
       }
     }
@@ -763,22 +767,25 @@ export function createRenderer3D(canvas, world, hooks) {
     // silhouette and no shaded flank, so from the chase camera it reads as
     // a soft puff, and overlapping puffs at two heights give the sea its
     // rolling relief. Same clearances as the base deck so islands +
-    // villages still poke through instead of drowning.
+    // villages still poke through instead of drowning. THIN pass: opacity
+    // 0.48, spacing 260, smaller quads 180-300, sparser outside the
+    // corridor — the puffs are scattered billows with blue between them,
+    // not a second white sheet.
     const puffGeo = new THREE.PlaneGeometry(1, 1);
     const puffMat = new THREE.MeshBasicMaterial({
-      map: cloudTex, transparent: true, depthWrite: false, opacity: 0.72,
+      map: cloudTex, transparent: true, depthWrite: false, opacity: 0.62,
     });
     const puffSpots = [];
-    for (let gx = -3000; gx <= 3000; gx += 190) {
-      for (let gz = -3000; gz <= 3000; gz += 190) {
+    for (let gx = -3000; gx <= 3000; gx += 220) {
+      for (let gz = -3000; gz <= 3000; gz += 220) {
         const inCorridor = gx > -1900 && gx < 400 && gz > -1900 && gz < 400;
-        if (!inCorridor && rng() < 0.45) continue;
+        if (!inCorridor && rng() < 0.6) continue;
         const x = gx + range(rng, -70, 70);
         const z = gz + range(rng, -70, 70);
         if (!clearOfRunways(x, z)) continue;
         if (world.groundHeight(x, z) > 18) continue;
         puffSpots.push({
-          x, z, y: 42 + rng() * 12, s: range(rng, 220, 380), rot: rng() * Math.PI,
+          x, z, y: 42 + rng() * 12, s: range(rng, 200, 330), rot: rng() * Math.PI,
         });
       }
     }
@@ -810,9 +817,11 @@ export function createRenderer3D(canvas, world, hooks) {
   }
   // Soft lumps riding on the deck itself, for billowy relief in the chase
   // view; plus four towering cumulus columns for the layered sky.
+  // THIN pass: 80 -> 48 lumps, opacity 0.9 -> 0.72 — fewer, lighter
+  // billows so the sea stays airy instead of filling white again.
   {
     const rng = mulberry32(world.seed + 7777);
-    for (let i = 0; i < 80; i += 1) {
+    for (let i = 0; i < 60; i += 1) {
       let x;
       let z;
       if (rng() < 0.65) {
@@ -825,7 +834,7 @@ export function createRenderer3D(canvas, world, hooks) {
       if (world.groundHeight(x, z) > 18) continue;
       if (Math.hypot(x, z) < 540) continue;
       const spr = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: cloudTex, transparent: true, depthWrite: false, opacity: 0.9,
+        map: cloudTex, transparent: true, depthWrite: false, opacity: 0.8,
       }));
       spr.position.set(x, 46 + rng() * 18, z);
       spr.scale.set(range(rng, 120, 240), range(rng, 60, 110), 1);
