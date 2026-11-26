@@ -19,17 +19,20 @@ function smooth(t) {
   return t * t * (3 - 2 * t);
 }
 
-// Golden Hour tokens: warm sunset light, deep blue zenith, vivid fields, ocean sea.
-// Polish round: the sky read pale/washed out in the chase shots — the zenith
-// is deeper now, the horizon a stronger orange, the fog cooler and shorter
-// so distant islands stay green instead of fading to beige.
+// Ref 3 palette (final push, tuan muda: match the PHOTO's colours, not a
+// deep-orange sunset): pale soft blue sky, a horizon that is only faintly
+// warm gold toward the sun and pale cool blue away from it, pale blue-grey
+// haze the distant sea melts into, warm-white cloud tops, soft blue-grey
+// cloud valleys, deep calm blue sea. Golden Hour stays warm, but soft and
+// pale blue-white — never saturated orange.
 const DAY = {
-  skyTop: 0x2b7fd4,
-  skyMid: 0x63a8de,
-  skyHorizon: 0xef9a3e,
-  skyBelow: 0x7d6a52,
-  fog: 0xc9d6e2,
-  sea: 0x25638f,
+  skyTop: 0x1e6fc4,
+  skyMid: 0x5ea0d8,
+  skyHorizon: 0xe9c795,
+  skyHorizonCool: 0xdce8ee,
+  skyBelow: 0x93a7ba,
+  fog: 0xd3dde8,
+  sea: 0x20598a,
   sand: 0xe8d29a,
   grassA: 0x55853f,
   grassB: 0x74a854,
@@ -165,7 +168,7 @@ function wingGeometry(span, rootChord, tipChord) {
   s.lineTo(0, rootChord / 2);
   s.closePath();
   const g = new THREE.ExtrudeGeometry(s, {
-    depth: 0.26, bevelEnabled: true, bevelThickness: 0.05, bevelSize: 0.05, bevelSegments: 2, steps: 1,
+    depth: 0.26, bevelEnabled: true, bevelThickness: 0.13, bevelSize: 0.13, bevelSegments: 3, steps: 1,
   });
   g.rotateX(-Math.PI / 2);
   g.translate(0, -0.13, 0);
@@ -182,24 +185,42 @@ export function createRenderer3D(canvas, world, hooks) {
   renderer.toneMappingExposure = 1.12;
 
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(DAY.fog, 1100, 5200);
+  // Warm haze: the sea (radius 5600) is fully fogged out before its edge,
+  // so the horizon is haze, not a hard disc edge. The cloud deck grid
+  // reaches ±3000 m, and at that range the fog has nearly swallowed it,
+  // so the deck melts into the haze instead of ending in a straight line.
+  scene.fog = new THREE.Fog(DAY.fog, 800, 3600);
 
-  // Gradient sky dome: blue zenith, warm peach horizon — sunset above, blue
-  // sky overhead, the Golden Hour look from every angle.
+  // Gradient sky dome: deep blue zenith, warm gold horizon toward the sun,
+  // pale cool horizon away from it — the Golden Hour look from every angle.
+  // The horizon band blends by azimuth so the sky is gold where the sun
+  // hangs and cool blue on the far side, like ref 1.
   {
     const skyGeo = new THREE.SphereGeometry(9000, 24, 12);
     const pos = skyGeo.attributes.position;
     const cols = [];
     const top = hexRGB(DAY.skyTop);
     const mid = hexRGB(DAY.skyMid);
-    const hor = hexRGB(DAY.skyHorizon);
+    const horWarm = hexRGB(DAY.skyHorizon);
+    const horCool = hexRGB(DAY.skyHorizonCool);
     const below = hexRGB(DAY.skyBelow);
+    const sunAz = Math.atan2(
+      Math.sin(SUN.azimuth) * Math.cos(SUN.elevation),
+      Math.cos(SUN.azimuth) * Math.cos(SUN.elevation),
+    );
     for (let i = 0; i < pos.count; i += 1) {
       const y = pos.getY(i) / 9000;
+      const az = Math.atan2(pos.getX(i), pos.getZ(i));
+      const warm = Math.pow(0.5 + 0.5 * Math.cos(az - sunAz), 1.4);
+      const hor = [
+        lerp(horCool.r, horWarm.r, warm),
+        lerp(horCool.g, horWarm.g, warm),
+        lerp(horCool.b, horWarm.b, warm),
+      ];
       let c;
       if (y > 0.18) c = lerpHex(DAY.skyMid, DAY.skyTop, (y - 0.18) / 0.42);
-      else if (y > 0.02) c = lerpHex(DAY.skyHorizon, DAY.skyMid, (y - 0.02) / 0.1);
-      else if (y > -0.08) c = lerpHex(DAY.skyBelow, DAY.skyHorizon, (y + 0.08) / 0.1);
+      else if (y > 0.02) c = [lerp(hor[0], mid.r, (y - 0.02) / 0.16), lerp(hor[1], mid.g, (y - 0.02) / 0.16), lerp(hor[2], mid.b, (y - 0.02) / 0.16)];
+      else if (y > -0.08) c = [lerp(below.r, hor[0], (y + 0.08) / 0.1), lerp(below.g, hor[1], (y + 0.08) / 0.1), lerp(below.b, hor[2], (y + 0.08) / 0.1)];
       else c = [below.r, below.g, below.b];
       cols.push(c[0], c[1], c[2]);
     }
@@ -211,12 +232,12 @@ export function createRenderer3D(canvas, world, hooks) {
     scene.add(sky);
   }
 
-  const camera = new THREE.PerspectiveCamera(58, 16 / 9, 0.5, 12000);
+  const camera = new THREE.PerspectiveCamera(54, 16 / 9, 0.5, 12000);
   scene.add(camera);
 
   // One warm sun direction for everything, low and golden, plus a cool fill
   // from the east so white surfaces never fall flat grey.
-  const hemi = new THREE.HemisphereLight(0xcfe0f5, 0x6a8a4a, 1.05);
+  const hemi = new THREE.HemisphereLight(0xcfe0f5, 0x66788a, 1.05);
   scene.add(hemi);
   const fill = new THREE.DirectionalLight(0xbfd9ff, 0.55);
   fill.position.set(800, 500, 600);
@@ -226,7 +247,7 @@ export function createRenderer3D(canvas, world, hooks) {
     Math.sin(SUN.elevation),
     Math.cos(SUN.azimuth) * Math.cos(SUN.elevation),
   );
-  const sun = new THREE.DirectionalLight(0xffd9a0, 2.8);
+  const sun = new THREE.DirectionalLight(0xffe2b0, 2.8);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.camera.left = -480;
@@ -259,15 +280,16 @@ export function createRenderer3D(canvas, world, hooks) {
     gc.height = 256;
     const g = gc.getContext('2d');
     const grad = g.createRadialGradient(128, 128, 0, 128, 128, 128);
-    grad.addColorStop(0, 'rgba(255, 196, 110, 0.55)');
-    grad.addColorStop(0.5, 'rgba(255, 180, 94, 0.22)');
-    grad.addColorStop(1, 'rgba(255, 180, 94, 0)');
+    grad.addColorStop(0, 'rgba(255, 216, 150, 0.5)');
+    grad.addColorStop(0.35, 'rgba(255, 206, 140, 0.28)');
+    grad.addColorStop(0.7, 'rgba(255, 200, 130, 0.1)');
+    grad.addColorStop(1, 'rgba(255, 200, 130, 0)');
     g.fillStyle = grad;
     g.fillRect(0, 0, 256, 256);
     const glowTex = new THREE.CanvasTexture(gc);
     const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, fog: false, depthWrite: false }));
     glow.position.copy(sunPos);
-    glow.scale.set(2600, 2600, 1);
+    glow.scale.set(4600, 4600, 1);
     glow.renderOrder = -0.6;
     scene.add(glow);
   }
@@ -281,14 +303,15 @@ export function createRenderer3D(canvas, world, hooks) {
   sea.receiveShadow = true;
   scene.add(sea);
 
-  // Whitecaps + sun glitter: the sea is not one flat blue sheet. Instanced
-  // flat white flecks scattered over open water, plus a band of warm
-  // glitter toward the low sun in the west.
+  // Whitecaps + a sun-glint path: the sea is not one flat blue sheet.
+  // Subtle instanced white flecks over open water, plus ONE soft specular
+  // streak running toward the low sun (ref 1) — a long warm gradient band
+  // on the water, not scattered flecks.
   {
     const dummy = new THREE.Object3D();
     const rng = mulberry32(world.seed + 777);
     const capGeo = new THREE.CircleGeometry(1, 8);
-    const capMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false });
+    const capMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.32, depthWrite: false });
     const caps = [];
     let guard = 0;
     while (caps.length < 300 && guard < 3000) {
@@ -308,31 +331,53 @@ export function createRenderer3D(canvas, world, hooks) {
     });
     capMesh.instanceMatrix.needsUpdate = true;
     scene.add(capMesh);
-    // Sun glitter: warm flecks in a broad band toward the sun azimuth.
-    const glitGeo = new THREE.CircleGeometry(1, 8);
-    const glitMat = new THREE.MeshBasicMaterial({ color: 0xffd9a0, transparent: true, opacity: 0.4, depthWrite: false });
-    const glits = [];
-    guard = 0;
-    while (glits.length < 90 && guard < 1200) {
-      guard += 1;
-      const along = range(rng, 300, 2100);
-      const across = range(rng, -900, 900);
-      const x = sunDir.x * along - sunDir.z * across;
-      const z = sunDir.z * along + sunDir.x * across;
-      if (Math.abs(x) > 2100 || Math.abs(z) > 2100) continue;
-      if (world.groundHeight(x, z) > 4) continue;
-      glits.push({ x, z, s: range(rng, 4, 12) });
-    }
-    const glitMesh = new THREE.InstancedMesh(glitGeo, glitMat, glits.length);
-    glits.forEach((p, i) => {
-      dummy.position.set(p.x, 0.35, p.z);
-      dummy.rotation.set(-Math.PI / 2, 0, rng() * Math.PI);
-      dummy.scale.set(p.s, p.s * 0.4, 1);
-      dummy.updateMatrix();
-      glitMesh.setMatrixAt(i, dummy.matrix);
+    // Sun-glint path: two long, soft, overlapping streaks on the water
+    // toward the sun azimuth. The texture is one wide radial gradient
+    // stretched along the streak, so it fades out at both ends and edges.
+    const sc = document.createElement('canvas');
+    sc.width = 512;
+    sc.height = 128;
+    const sg = sc.getContext('2d');
+    const sgrad = sg.createRadialGradient(256, 64, 0, 256, 64, 256);
+    sgrad.addColorStop(0, 'rgba(255, 222, 160, 0.4)');
+    sgrad.addColorStop(0.45, 'rgba(255, 212, 150, 0.2)');
+    sgrad.addColorStop(1, 'rgba(255, 212, 150, 0)');
+    sg.fillStyle = sgrad;
+    sg.fillRect(0, 0, 512, 128);
+    // Elliptical edge mask: the streak must fade at its long edges too,
+    // or it reads as a hard gold ribbon with a straight cut.
+    sg.globalCompositeOperation = 'destination-in';
+    sg.save();
+    sg.translate(256, 64);
+    sg.scale(1, 0.5);
+    const smask = sg.createRadialGradient(0, 0, 0, 0, 0, 256);
+    smask.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    smask.addColorStop(0.6, 'rgba(255, 255, 255, 0.85)');
+    smask.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    sg.fillStyle = smask;
+    sg.fillRect(-256, -256, 512, 512);
+    sg.restore();
+    sg.globalCompositeOperation = 'source-over';
+    const streakTex = new THREE.CanvasTexture(sc);
+    const streakMat = new THREE.MeshBasicMaterial({
+      map: streakTex, transparent: true, depthWrite: false, opacity: 0.85,
     });
-    glitMesh.instanceMatrix.needsUpdate = true;
-    scene.add(glitMesh);
+    // The streak runs along the sun direction (sunDir points at the sun);
+    // rotate the plane so its long axis lines up with that azimuth.
+    const streakAngle = Math.atan2(sunDir.z, sunDir.x);
+    const streaks = [
+      { along: -1500, len: 3400, wid: 620, op: 0.5 },
+      { along: -1300, len: 2600, wid: 220, op: 0.75 },
+    ];
+    for (const st of streaks) {
+      const streak = new THREE.Mesh(new THREE.PlaneGeometry(st.len, st.wid), streakMat.clone());
+      streak.material.opacity = st.op;
+      streak.rotation.x = -Math.PI / 2;
+      streak.rotation.z = -streakAngle;
+      streak.position.set(sunDir.x * -st.along, 0.5, sunDir.z * -st.along);
+      streak.renderOrder = 0.5;
+      scene.add(streak);
+    }
   }
 
   // Islands.
@@ -602,69 +647,210 @@ export function createRenderer3D(canvas, world, hooks) {
     scene.add(lights);
   }
 
-  // Clouds: 26 seeded high clouds + 10 low puffs, each a cluster of
-  // flattened spheres; plus a sea of clouds below flight level and six
-  // towering cumulus stacks for the dramatic layered sky.
-  const clouds = [];
-  const puffGeo = new THREE.IcosahedronGeometry(1, 1);
-  // Clouds are unlit bright white (three close shades) — lit standard
-  // material made them read as dark grey rocks.
-  const puffMats = [0xffffff, 0xf2f5f7, 0xe6ebef].map(
-    (c) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.96 }),
-  );
-  function addCloud(cx, cy, cz, s, drift, puffs, flat) {
-    const group = new THREE.Group();
-    const offsets = [[0, 0, 0, 1], [-0.85, 0.14, 0.1, 0.62], [0.85, 0.12, -0.1, 0.66], [-0.3, -0.22, 0.2, 0.7], [0.4, -0.2, -0.15, 0.62]];
-    const n = Math.min(puffs, offsets.length);
-    for (let i = 0; i < n; i += 1) {
-      const [ox, oy, oz, os] = offsets[i];
-      const puff = new THREE.Mesh(puffGeo, puffMats[i % puffMats.length]);
-      puff.position.set(ox * s, oy * s, oz * s);
-      puff.scale.set(s * os, s * os * 0.55 * (flat || 1), s * os * 0.7);
-      group.add(puff);
+  // Cloud sea (ref 3 = the minimum bar: above a sea of clouds). The old
+  // system read as discrete white cotton blobs because every cloud was a
+  // hard-edged icosahedron cluster. Everything here is one shared soft
+  // texture instead: a canvas of overlapping radial gradients, white with
+  // feathered alpha edges and a faint cool shadow tint, so a single quad
+  // reads as a lumpy cloud with no hard outline at all.
+  function makeCloudTexture() {
+    const c = document.createElement('canvas');
+    c.width = 512;
+    c.height = 512;
+    const g = c.getContext('2d');
+    const trng = mulberry32(world.seed + 5150);
+    const blobs = [];
+    // Blobs spread over the WHOLE canvas (centres to the edges, radii
+    // large) so every part of a deck quad carries cloud alpha — a texture
+    // whose corners are transparent leaves hard-edged blue gaps in the sea.
+    for (let i = 0; i < 24; i += 1) {
+      blobs.push({
+        x: 40 + trng() * 432,
+        y: 40 + trng() * 432,
+        r: range(trng, 80, 170),
+      });
     }
-    group.position.set(cx, cy, cz);
-    scene.add(group);
-    clouds.push({ group, baseX: cx, drift });
+    // Cool shadow under-lumps first, then the white tops.
+    for (const b of blobs) {
+      const grad = g.createRadialGradient(b.x, b.y + 14, 0, b.x, b.y + 14, b.r);
+      grad.addColorStop(0, 'rgba(158, 178, 198, 0.24)');
+      grad.addColorStop(1, 'rgba(158, 178, 198, 0)');
+      g.fillStyle = grad;
+      g.fillRect(0, 0, 512, 512);
+    }
+    for (const b of blobs) {
+      const grad = g.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
+      grad.addColorStop(0, 'rgba(255, 253, 246, 0.98)');
+      grad.addColorStop(0.6, 'rgba(252, 250, 246, 0.85)');
+      grad.addColorStop(1, 'rgba(252, 250, 246, 0)');
+      g.fillStyle = grad;
+      g.fillRect(0, 0, 512, 512);
+    }
+    // Edge mask: fade the whole texture to transparent at the canvas
+    // borders, so a quad or sprite never shows a hard rectangular edge.
+    // (Cycle 3: blobs near the canvas edge kept alpha ~0.7 at the border,
+    // so every deck quad and sky sprite read as a white rectangle, and
+    // the lanes between quads showed as hard blue diagonal bands.)
+    g.globalCompositeOperation = 'destination-in';
+    const mask = g.createRadialGradient(256, 256, 0, 256, 256, 256);
+    mask.addColorStop(0, 'rgba(255, 255, 255, 1)');
+    mask.addColorStop(0.55, 'rgba(255, 255, 255, 0.9)');
+    mask.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    g.fillStyle = mask;
+    g.fillRect(0, 0, 512, 512);
+    g.globalCompositeOperation = 'source-over';
+    return new THREE.CanvasTexture(c);
   }
-  for (const c of world.clouds) addCloud(c.x, c.y, c.z, c.s, c.drift, 5);
+  const cloudTex = makeCloudTexture();
+
+  // The deck: one InstancedMesh of large flat soft-textured quads at
+  // y 32-42, overlapping just enough that the chase view sees a white sea
+  // of distinct soft puffs with shadowed valleys between them — the plane
+  // flies above it, exactly like ref 3. Too much overlap saturates the
+  // alpha to a featureless white sheet (cycle 2), too little leaves blue
+  // holes (cycle 1): spacing 200 with quads 240-360 is the middle. The
+  // deck sits LOW so the red-roof villages (25-46 m up the island slopes)
+  // poke through it instead of drowning under it, and it is cleared
+  // around the three runway islands so takeoffs and landings stay in
+  // clear air. Densest in the ring corridor (Harbour -> Coral -> Turtle).
+  // The deck is static (a sea does not drift); only the sprites above it
+  // drift, via the `clouds` list the frame loop already animates.
+  const clouds = [];
   {
     const rng = mulberry32(world.seed + 31337);
-    for (let i = 0; i < 10; i += 1) {
-      addCloud(range(rng, -1800, 1800), range(rng, 95, 175), range(rng, -1800, 1800), range(rng, 20, 45), range(rng, 1.5, 4), 5);
+    const deckGeo = new THREE.PlaneGeometry(1, 1);
+    const deckMat = new THREE.MeshBasicMaterial({
+      map: cloudTex, transparent: true, depthWrite: false, opacity: 0.92,
+    });
+    const clearOfRunways = (x, z) => {
+      for (const [cx, cz, cr] of [[0, 0, 540], [1250, 700, 500], [-1250, 950, 500]]) {
+        if (Math.hypot(x - cx, z - cz) < cr) return false;
+      }
+      return true;
+    };
+    const spots = [];
+    for (let gx = -3000; gx <= 3000; gx += 180) {
+      for (let gz = -3000; gz <= 3000; gz += 180) {
+        const inCorridor = gx > -1900 && gx < 400 && gz > -1900 && gz < 400;
+        if (!inCorridor && rng() < 0.45) continue;
+        const x = gx + range(rng, -70, 70);
+        const z = gz + range(rng, -70, 70);
+        if (!clearOfRunways(x, z)) continue;
+        if (world.groundHeight(x, z) > 18) continue;
+        spots.push({
+          x, z, y: 32 + rng() * 10, s: range(rng, 280, 420), rot: rng() * Math.PI,
+        });
+      }
     }
-    // Sea of clouds: a low deck over the water, below the flight path, so
-    // the chase view flies above a white sea with land far below. Biased
-    // toward the ring corridor (Harbour -> Coral -> Turtle) so the deck is
-    // actually under the plane in the chase shots. Flatter and wider than
-    // the high clouds (flat 0.6) so they read as a cloud sea from above,
-    // not cotton balls; sparse enough not to bury the sea.
-    let placed = 0;
-    let guard = 0;
-    while (placed < 85 && guard < 1100) {
-      guard += 1;
+    const deck = new THREE.InstancedMesh(deckGeo, deckMat, spots.length);
+    const dummy = new THREE.Object3D();
+    spots.forEach((p, i) => {
+      dummy.position.set(p.x, p.y, p.z);
+      dummy.rotation.set(-Math.PI / 2, 0, p.rot);
+      dummy.scale.set(p.s, p.s * range(rng, 0.7, 1), 1);
+      dummy.updateMatrix();
+      deck.setMatrixAt(i, dummy.matrix);
+    });
+    deck.instanceMatrix.needsUpdate = true;
+    deck.renderOrder = 2;
+    scene.add(deck);
+
+    // Mound layer (ref 3, final push): real 3D relief on the cloud sea.
+    // The flat deck alone reads as a white carpet from the chase view, so
+    // these smooth flattened domes sit on top of it and give it hills —
+    // bright warm sunlit tops, soft blue-grey valleys where the domes
+    // overlap, exactly like the photo. The grading is real light (warm sun
+    // + cool hemisphere), not painted texture. Same clearances as the deck
+    // so islands + villages still poke through the sea instead of drowning.
+    const moundGeo = new THREE.SphereGeometry(1, 16, 12);
+    const moundMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0 });
+    const moundSpots = [];
+    for (let gx = -3000; gx <= 3000; gx += 130) {
+      for (let gz = -3000; gz <= 3000; gz += 130) {
+        const inCorridor = gx > -1900 && gx < 400 && gz > -1900 && gz < 400;
+        if (!inCorridor && rng() < 0.5) continue;
+        const x = gx + range(rng, -45, 45);
+        const z = gz + range(rng, -45, 45);
+        if (!clearOfRunways(x, z)) continue;
+        if (world.groundHeight(x, z) > 18) continue;
+        moundSpots.push({
+          x, z, y: 36 + rng() * 10,
+          rx: range(rng, 45, 95), ry: range(rng, 8, 20), rz: range(rng, 40, 85),
+        });
+      }
+    }
+    const mounds = new THREE.InstancedMesh(moundGeo, moundMat, moundSpots.length);
+    const mcol = new THREE.Color();
+    moundSpots.forEach((p, i) => {
+      dummy.position.set(p.x, p.y, p.z);
+      dummy.rotation.set(0, rng() * Math.PI, 0);
+      dummy.scale.set(p.rx, p.ry, p.rz);
+      dummy.updateMatrix();
+      mounds.setMatrixAt(i, dummy.matrix);
+      // Subtle per-mound tint: mostly pure white, some warm sunlit, some cool.
+      const t = rng();
+      if (t < 0.25) mcol.setHex(0xfff6e6);
+      else if (t < 0.45) mcol.setHex(0xdde8f2);
+      else mcol.setHex(0xffffff);
+      mounds.setColorAt(i, mcol);
+    });
+    mounds.instanceMatrix.needsUpdate = true;
+    if (mounds.instanceColor) mounds.instanceColor.needsUpdate = true;
+    mounds.castShadow = false;
+    mounds.receiveShadow = false;
+    scene.add(mounds);
+  }
+
+  // High clouds: soft billboard sprites with the same feathered texture —
+  // big, few, drifting slowly — instead of hard icosahedron clusters.
+  // Kept modest in size so the upper sky stays a deep blue band (ref 3)
+  // instead of filling white.
+  for (const c of world.clouds) {
+    const spr = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: cloudTex, transparent: true, depthWrite: false, opacity: 0.85,
+    }));
+    spr.position.set(c.x, c.y, c.z);
+    spr.scale.set(c.s * 3.2, c.s * 1.7, 1);
+    scene.add(spr);
+    clouds.push({ group: spr, baseX: c.x, drift: c.drift });
+  }
+  // Soft lumps riding on the deck itself, for billowy relief in the chase
+  // view; plus four towering cumulus columns for the layered sky.
+  {
+    const rng = mulberry32(world.seed + 7777);
+    for (let i = 0; i < 42; i += 1) {
       let x;
       let z;
-      if (rng() < 0.6) {
-        x = range(rng, -1400, 300);
-        z = range(rng, -1200, 300);
+      if (rng() < 0.65) {
+        x = range(rng, -1500, 300);
+        z = range(rng, -1300, 300);
       } else {
-        x = range(rng, -2000, 2000);
-        z = range(rng, -2000, 2000);
+        x = range(rng, -1900, 1900);
+        z = range(rng, -1900, 1900);
       }
-      if (world.groundHeight(x, z) > 5) continue;
-      addCloud(x, 50 + rng() * 20, z, range(rng, 16, 28), range(rng, 1.5, 4), 5, 0.6);
-      placed += 1;
+      if (world.groundHeight(x, z) > 18) continue;
+      if (Math.hypot(x, z) < 540) continue;
+      const spr = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: cloudTex, transparent: true, depthWrite: false, opacity: 0.9,
+      }));
+      spr.position.set(x, 46 + rng() * 18, z);
+      spr.scale.set(range(rng, 120, 240), range(rng, 60, 110), 1);
+      scene.add(spr);
+      clouds.push({ group: spr, baseX: x, drift: range(rng, 1.5, 4) });
     }
-    // Towering cumulus: four tall stacks for the dramatic layered sky.
     for (let i = 0; i < 4; i += 1) {
       const cx = range(rng, -1700, 1700);
       const cz = range(rng, -1700, 1700);
       const drift = range(rng, 1.5, 3);
-      for (let k = 0; k < 9; k += 1) {
-        const a = k * 2.4;
-        const rr = (1 - k / 9) * 46;
-        addCloud(cx + Math.cos(a) * rr, 125 + k * 22, cz + Math.sin(a) * rr, 36 - k * 2.2, drift, 3);
+      const stack = [[130, 200, 110], [195, 160, 85], [255, 115, 60]];
+      for (const [y, w, h] of stack) {
+        const spr = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: cloudTex, transparent: true, depthWrite: false, opacity: 0.88,
+        }));
+        spr.position.set(cx, y, cz);
+        spr.scale.set(w, h, 1);
+        scene.add(spr);
+        clouds.push({ group: spr, baseX: cx, drift });
       }
     }
   }
@@ -733,7 +919,7 @@ export function createRenderer3D(canvas, world, hooks) {
     });
     const dark = new THREE.MeshStandardMaterial({ color: 0x2b2b2b, roughness: 0.7 });
 
-    const fuselage = new THREE.Mesh(new THREE.CapsuleGeometry(1.0, 5.2, 4, 12), white);
+    const fuselage = new THREE.Mesh(new THREE.CapsuleGeometry(1.0, 5.2, 8, 24), white);
     fuselage.rotation.x = Math.PI / 2;
     fuselage.castShadow = true;
     planeGroup.add(fuselage);
@@ -744,17 +930,17 @@ export function createRenderer3D(canvas, world, hooks) {
       planeGroup.add(stripe);
     }
     // Red band around the tail.
-    const tailBand = new THREE.Mesh(new THREE.CylinderGeometry(1.02, 1.02, 0.55, 12), red);
+    const tailBand = new THREE.Mesh(new THREE.CylinderGeometry(1.02, 1.02, 0.55, 24), red);
     tailBand.rotation.x = Math.PI / 2;
     tailBand.position.set(0, 0, -3.3);
     planeGroup.add(tailBand);
     // Long sleek nose.
-    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.92, 1.9, 12), white);
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.92, 1.9, 24), white);
     nose.rotation.x = Math.PI / 2;
     nose.position.set(0, 0, 4.5);
     nose.castShadow = true;
     planeGroup.add(nose);
-    const tail = new THREE.Mesh(new THREE.ConeGeometry(0.85, 1.7, 12), white);
+    const tail = new THREE.Mesh(new THREE.ConeGeometry(0.85, 1.7, 24), white);
     tail.rotation.x = -Math.PI / 2;
     tail.position.set(0, 0, -4.3);
     tail.castShadow = true;
@@ -788,7 +974,7 @@ export function createRenderer3D(canvas, world, hooks) {
     finShape.quadraticCurveTo(1.3, 0.1, 1.1, 0);
     finShape.closePath();
     const finGeo = new THREE.ExtrudeGeometry(finShape, {
-      depth: 0.2, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.04, bevelSegments: 2,
+      depth: 0.2, bevelEnabled: true, bevelThickness: 0.09, bevelSize: 0.09, bevelSegments: 3,
     });
     finGeo.translate(0, 0, -0.1);
     const fin = new THREE.Mesh(finGeo, red);
@@ -816,7 +1002,7 @@ export function createRenderer3D(canvas, world, hooks) {
       planeGroup.add(dot);
     }
     // Canopy glass.
-    const canopy = new THREE.Mesh(new THREE.SphereGeometry(0.95, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2), glassMat);
+    const canopy = new THREE.Mesh(new THREE.SphereGeometry(0.95, 24, 18, 0, Math.PI * 2, 0, Math.PI / 2), glassMat);
     canopy.scale.set(1, 0.7, 1.8);
     canopy.position.set(0, 0.55, 1.3);
     planeGroup.add(canopy);
@@ -824,21 +1010,18 @@ export function createRenderer3D(canvas, world, hooks) {
     // the nose axis (a solid black star read as a cartoon asterisk).
     propGroup = new THREE.Group();
     propGroup.position.set(0, 0, 5.55);
-    const hub = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.9, 8), dark);
+    const hub = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.9, 16), dark);
     hub.rotation.x = Math.PI / 2;
     propGroup.add(hub);
-    const propMat = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.6 });
+    const propMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.6 });
     for (let b = 0; b < 3; b += 1) {
-      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.18, 4.6, 0.08), propMat);
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.14, 4.6, 0.08), propMat);
       blade.rotation.z = (b / 3) * Math.PI * 2;
       propGroup.add(blade);
     }
-    const disc = new THREE.Mesh(
-      new THREE.CircleGeometry(2.3, 24),
-      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.1, side: THREE.DoubleSide }),
-    );
-    disc.position.set(0, 0, 0.12);
-    propGroup.add(disc);
+    // No translucent prop disc: with the closer chase camera (round 2) the
+    // disc read as a giant grey balloon / radar dish behind the fuselage.
+    // The three blades + hub alone read fine at speed.
     planeGroup.add(propGroup);
     // Landing gear.
     gearGroup = new THREE.Group();
@@ -846,7 +1029,7 @@ export function createRenderer3D(canvas, world, hooks) {
       const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.7, 6), dark);
       strut.position.set(side * 0.9, -1.25, 1.2);
       gearGroup.add(strut);
-      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.35, 12), dark);
+      const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.35, 20), dark);
       wheel.rotation.z = Math.PI / 2;
       wheel.position.set(side * 0.9, -1.5, 1.2);
       gearGroup.add(wheel);
@@ -1374,22 +1557,38 @@ export function createRenderer3D(canvas, world, hooks) {
       };
       return { pos, look };
     }
-    // Polish round: pull the chase camera a little further back and higher
-    // and look further ahead, so more of the scene (village, river, cloud
-    // deck) is in frame instead of empty sea.
-    const back = titleView ? 30 : 27;
-    const camUp = titleView ? 16 : 8;
-    const ahead = titleView ? 70 : 40;
-    const side = titleView ? 48 : 0;
+    if (titleView) {
+      // Hero shot (title only): the camera sits ahead and to the side, low,
+      // looking BACK at the plane as it climbs away from home — the plane
+      // is big in the foreground, its home island + red-roof village +
+      // runway behind it, cloud sea below, sunset sky above. The chase
+      // camera below is untouched.
+      const pos = {
+        x: plane.x + fx * 26 + Math.cos(h) * 20,
+        y: plane.y + 4,
+        z: plane.z + fz * 26 - Math.sin(h) * 20,
+      };
+      const look = { x: plane.x, y: plane.y + 1, z: plane.z };
+      return { pos, look };
+    }
+    // Ref 3 composition: the chase camera sits higher and looks DOWN at the
+    // cloud sea instead of level at the horizon — the frame is mostly cloud
+    // sea below with the plane, the horizon rides at the very top like the
+    // photo, and the rings (at flight height, ahead) stay in frame near
+    // the top. The camera never drops near the terrain.
+    const back = 16;
+    const camUp = 11;
+    const ahead = 26;
+    const side = 0;
     const pos = {
       x: plane.x - fx * back + Math.cos(h) * side,
       y: plane.y + camUp,
       z: plane.z - fz * back - Math.sin(h) * side,
     };
     const look = {
-      x: plane.x + fx * (titleView ? 12 : ahead),
-      y: plane.y + (titleView ? 5 : 1.5),
-      z: plane.z + fz * (titleView ? 12 : ahead),
+      x: plane.x + fx * ahead,
+      y: plane.y - 8,
+      z: plane.z + fz * ahead,
     };
     return { pos, look };
   }
@@ -1409,6 +1608,12 @@ export function createRenderer3D(canvas, world, hooks) {
       camera.aspect = W / H;
       camera.updateProjectionMatrix();
     }
+
+    // Title dressing: richer Golden Hour on the hero shot only — a warmer,
+    // stronger sun and a touch more exposure so the plane glows against the
+    // cloud sea. Chase/cockpit rendering is untouched.
+    renderer.toneMappingExposure = titleView ? 1.28 : 1.12;
+    sun.intensity = titleView ? 3.6 : 2.8;
 
     // Goals follow the current mission.
     const ringStates = mission.id === 'rings' ? mission.rings.map((r) => (r.passed ? '1' : '0')).join('') : '';
