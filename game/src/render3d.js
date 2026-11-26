@@ -19,14 +19,17 @@ function smooth(t) {
   return t * t * (3 - 2 * t);
 }
 
-// Golden Hour tokens: warm sunset light, blue zenith, vivid fields, ocean sea.
+// Golden Hour tokens: warm sunset light, deep blue zenith, vivid fields, ocean sea.
+// Polish round: the sky read pale/washed out in the chase shots — the zenith
+// is deeper now, the horizon a stronger orange, the fog cooler and shorter
+// so distant islands stay green instead of fading to beige.
 const DAY = {
-  skyTop: 0x3f8fd8,
-  skyMid: 0x7fb3e0,
-  skyHorizon: 0xf6c98a,
-  skyBelow: 0x9a8a72,
-  fog: 0xdccfb2,
-  sea: 0x2a6a94,
+  skyTop: 0x2b7fd4,
+  skyMid: 0x63a8de,
+  skyHorizon: 0xef9a3e,
+  skyBelow: 0x7d6a52,
+  fog: 0xc9d6e2,
+  sea: 0x25638f,
   sand: 0xe8d29a,
   grassA: 0x55853f,
   grassB: 0x74a854,
@@ -176,10 +179,10 @@ export function createRenderer3D(canvas, world, hooks) {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.06;
+  renderer.toneMappingExposure = 1.12;
 
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(DAY.fog, 900, 6500);
+  scene.fog = new THREE.Fog(DAY.fog, 1100, 5200);
 
   // Gradient sky dome: blue zenith, warm peach horizon — sunset above, blue
   // sky overhead, the Golden Hour look from every angle.
@@ -195,7 +198,7 @@ export function createRenderer3D(canvas, world, hooks) {
       const y = pos.getY(i) / 9000;
       let c;
       if (y > 0.18) c = lerpHex(DAY.skyMid, DAY.skyTop, (y - 0.18) / 0.42);
-      else if (y > 0.02) c = lerpHex(DAY.skyHorizon, DAY.skyMid, (y - 0.02) / 0.16);
+      else if (y > 0.02) c = lerpHex(DAY.skyHorizon, DAY.skyMid, (y - 0.02) / 0.1);
       else if (y > -0.08) c = lerpHex(DAY.skyBelow, DAY.skyHorizon, (y + 0.08) / 0.1);
       else c = [below.r, below.g, below.b];
       cols.push(c[0], c[1], c[2]);
@@ -208,7 +211,7 @@ export function createRenderer3D(canvas, world, hooks) {
     scene.add(sky);
   }
 
-  const camera = new THREE.PerspectiveCamera(55, 16 / 9, 0.5, 12000);
+  const camera = new THREE.PerspectiveCamera(58, 16 / 9, 0.5, 12000);
   scene.add(camera);
 
   // One warm sun direction for everything, low and golden, plus a cool fill
@@ -236,6 +239,39 @@ export function createRenderer3D(canvas, world, hooks) {
   scene.add(sun);
   scene.add(sun.target);
 
+  // A visible sun disc + warm glow low in the west, so the sunset shot
+  // (2-play, facing the sun) reads as Golden Hour instead of pale haze.
+  // The glow is a soft radial-gradient sprite (no hard edge); the disc is
+  // a small bright circle. Both sit inside the sky dome (8400 < 9000) and
+  // terrain still occludes them.
+  {
+    const sunPos = sunDir.clone().multiplyScalar(8400);
+    const disc = new THREE.Mesh(
+      new THREE.CircleGeometry(130, 32),
+      new THREE.MeshBasicMaterial({ color: 0xfff8d0, fog: false, depthWrite: false, side: THREE.DoubleSide }),
+    );
+    disc.position.copy(sunPos);
+    disc.lookAt(camera.position);
+    disc.renderOrder = -0.5;
+    scene.add(disc);
+    const gc = document.createElement('canvas');
+    gc.width = 256;
+    gc.height = 256;
+    const g = gc.getContext('2d');
+    const grad = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+    grad.addColorStop(0, 'rgba(255, 196, 110, 0.55)');
+    grad.addColorStop(0.5, 'rgba(255, 180, 94, 0.22)');
+    grad.addColorStop(1, 'rgba(255, 180, 94, 0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 256, 256);
+    const glowTex = new THREE.CanvasTexture(gc);
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, fog: false, depthWrite: false }));
+    glow.position.copy(sunPos);
+    glow.scale.set(2600, 2600, 1);
+    glow.renderOrder = -0.6;
+    scene.add(glow);
+  }
+
   // Sea: one big disc to the horizon.
   const sea = new THREE.Mesh(
     new THREE.CircleGeometry(5600, 48),
@@ -244,6 +280,60 @@ export function createRenderer3D(canvas, world, hooks) {
   sea.rotation.x = -Math.PI / 2;
   sea.receiveShadow = true;
   scene.add(sea);
+
+  // Whitecaps + sun glitter: the sea is not one flat blue sheet. Instanced
+  // flat white flecks scattered over open water, plus a band of warm
+  // glitter toward the low sun in the west.
+  {
+    const dummy = new THREE.Object3D();
+    const rng = mulberry32(world.seed + 777);
+    const capGeo = new THREE.CircleGeometry(1, 8);
+    const capMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false });
+    const caps = [];
+    let guard = 0;
+    while (caps.length < 300 && guard < 3000) {
+      guard += 1;
+      const x = range(rng, -2100, 2100);
+      const z = range(rng, -2100, 2100);
+      if (world.groundHeight(x, z) > 4) continue;
+      caps.push({ x, z, s: range(rng, 4, 12) });
+    }
+    const capMesh = new THREE.InstancedMesh(capGeo, capMat, caps.length);
+    caps.forEach((p, i) => {
+      dummy.position.set(p.x, 0.4, p.z);
+      dummy.rotation.set(-Math.PI / 2, 0, rng() * Math.PI);
+      dummy.scale.set(p.s, p.s * 0.45, 1);
+      dummy.updateMatrix();
+      capMesh.setMatrixAt(i, dummy.matrix);
+    });
+    capMesh.instanceMatrix.needsUpdate = true;
+    scene.add(capMesh);
+    // Sun glitter: warm flecks in a broad band toward the sun azimuth.
+    const glitGeo = new THREE.CircleGeometry(1, 8);
+    const glitMat = new THREE.MeshBasicMaterial({ color: 0xffd9a0, transparent: true, opacity: 0.4, depthWrite: false });
+    const glits = [];
+    guard = 0;
+    while (glits.length < 90 && guard < 1200) {
+      guard += 1;
+      const along = range(rng, 300, 2100);
+      const across = range(rng, -900, 900);
+      const x = sunDir.x * along - sunDir.z * across;
+      const z = sunDir.z * along + sunDir.x * across;
+      if (Math.abs(x) > 2100 || Math.abs(z) > 2100) continue;
+      if (world.groundHeight(x, z) > 4) continue;
+      glits.push({ x, z, s: range(rng, 4, 12) });
+    }
+    const glitMesh = new THREE.InstancedMesh(glitGeo, glitMat, glits.length);
+    glits.forEach((p, i) => {
+      dummy.position.set(p.x, 0.35, p.z);
+      dummy.rotation.set(-Math.PI / 2, 0, rng() * Math.PI);
+      dummy.scale.set(p.s, p.s * 0.4, 1);
+      dummy.updateMatrix();
+      glitMesh.setMatrixAt(i, dummy.matrix);
+    });
+    glitMesh.instanceMatrix.needsUpdate = true;
+    scene.add(glitMesh);
+  }
 
   // Islands.
   const islandMat = new THREE.MeshStandardMaterial({
@@ -280,19 +370,21 @@ export function createRenderer3D(canvas, world, hooks) {
     scene.add(river);
   }
 
-  // Villages on Harbour and Beacon: instanced walls + real gable roofs
-  // (triangular prisms, not pyramids) + windows and doors.
+  // Villages on EVERY island: the chase shots fly the ring corridor between
+  // islands, and a village that only exists on Harbour is behind the plane
+  // — invisible. Houses are bigger now and clustered tight, so a village
+  // reads as a red-roof town from 300 m up, not scattered dots.
   const villageSpots = [];
   {
     const rng = mulberry32(world.seed + 4242);
-    for (const island of [world.islands[0], world.islands[3]]) {
-      const count = island === world.islands[0] ? 16 : 12;
+    for (const island of world.islands) {
+      const count = island === world.islands[0] ? 20 : 13;
       let placed = 0;
       let guard = 0;
       while (placed < count && guard < 300) {
         guard += 1;
         const a = rng() * Math.PI * 2;
-        const d = island.r * (0.3 + rng() * 0.45);
+        const d = island.r * (0.2 + rng() * 0.38);
         const x = island.x + Math.cos(a) * d;
         const z = island.z + Math.sin(a) * d;
         if (island.runway) {
@@ -300,10 +392,10 @@ export function createRenderer3D(canvas, world, hooks) {
           const dz = z - island.z;
           const along = Math.abs(dx * Math.sin(island.runway.heading) + dz * Math.cos(island.runway.heading));
           const across = Math.abs(dx * Math.cos(island.runway.heading) - dz * Math.sin(island.runway.heading));
-          if (along < island.runway.length / 2 + 40 && across < island.runway.width / 2 + 40) continue;
+          if (along < island.runway.length / 2 + 70 && across < island.runway.width / 2 + 70) continue;
         }
         if (island.name === 'Harbour' && nearRiver(x, z, 26)) continue;
-        villageSpots.push({ x, z, y: world.groundHeight(x, z), w: 8 + rng() * 4, h: 5 + rng() * 2.5, d: 7 + rng() * 3, rot: rng() * Math.PI });
+        villageSpots.push({ x, z, y: world.groundHeight(x, z), w: 9 + rng() * 4, h: 5.5 + rng() * 2.5, d: 8 + rng() * 3, rot: rng() * Math.PI });
         placed += 1;
       }
     }
@@ -383,26 +475,29 @@ export function createRenderer3D(canvas, world, hooks) {
         palmSpots.push({ x: island.x + p.dx, z: island.z + p.dz, s: p.s });
       }
     }
-    const trunkGeo = new THREE.CylinderGeometry(0.35, 0.55, 7, 5);
+    const trunkGeo = new THREE.CylinderGeometry(0.35, 0.55, 8, 5);
     const trunkMat = new THREE.MeshStandardMaterial({ color: DAY.trunk, roughness: 1 });
     const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, palmSpots.length);
-    const canopyGeo = new THREE.IcosahedronGeometry(3.4, 0);
+    const canopyGeo = new THREE.IcosahedronGeometry(4.3, 0);
     const canopyMat = new THREE.MeshStandardMaterial({ color: DAY.palm, roughness: 1, flatShading: true });
     const canopies = new THREE.InstancedMesh(canopyGeo, canopyMat, palmSpots.length);
     palmSpots.forEach((p, i) => {
       const y = world.groundHeight(p.x, p.z);
-      dummy.position.set(p.x, y + 3.5 * p.s, p.z);
+      dummy.position.set(p.x, y + 4 * p.s, p.z);
       dummy.rotation.set(0, 0, (i % 5 - 2) * 0.05);
       dummy.scale.setScalar(p.s);
       dummy.updateMatrix();
       trunks.setMatrixAt(i, dummy.matrix);
-      dummy.position.set(p.x, y + (7 * p.s + 2.2 * p.s), p.z);
+      dummy.position.set(p.x, y + (8 * p.s + 2.4 * p.s), p.z);
       dummy.scale.set(p.s, p.s * 0.55, p.s);
       dummy.updateMatrix();
       canopies.setMatrixAt(i, dummy.matrix);
     });
-    trunks.castShadow = true;
-    canopies.castShadow = true;
+    // Trees do not cast shadows: with the sun low, their long shadows fell
+    // across the open sea as dark stains (seen in 3-rings cycle 2). The
+    // plane and the houses still cast, so ground contact still reads.
+    trunks.castShadow = false;
+    canopies.castShadow = false;
     trunks.instanceMatrix.needsUpdate = true;
     canopies.instanceMatrix.needsUpdate = true;
     scene.add(trunks);
@@ -411,7 +506,7 @@ export function createRenderer3D(canvas, world, hooks) {
     const coniferSpots = [];
     const rng = mulberry32(world.seed + 991);
     for (const island of world.islands) {
-      for (let i = 0; i < 8; i += 1) {
+      for (let i = 0; i < 14; i += 1) {
         const a = rng() * Math.PI * 2;
         const d = island.r * (0.25 + rng() * 0.55);
         const x = island.x + Math.cos(a) * d;
@@ -424,12 +519,12 @@ export function createRenderer3D(canvas, world, hooks) {
           if (along < island.runway.length / 2 + 30 && across < island.runway.width / 2 + 30) continue;
         }
         if (island.name === 'Harbour' && nearRiver(x, z, 20)) continue;
-        coniferSpots.push({ x, z, s: 0.8 + rng() * 0.9 });
+        coniferSpots.push({ x, z, s: 1.0 + rng() * 1.0 });
       }
     }
     const cTrunkGeo = new THREE.CylinderGeometry(0.4, 0.6, 3.5, 5);
     const cTrunks = new THREE.InstancedMesh(cTrunkGeo, trunkMat, coniferSpots.length);
-    const coneGeo = new THREE.ConeGeometry(3.6, 10, 6);
+    const coneGeo = new THREE.ConeGeometry(4.2, 12, 6);
     const coneMat = new THREE.MeshStandardMaterial({ color: DAY.pine, roughness: 1, flatShading: true });
     const cones = new THREE.InstancedMesh(coneGeo, coneMat, coniferSpots.length);
     coniferSpots.forEach((p, i) => {
@@ -444,8 +539,8 @@ export function createRenderer3D(canvas, world, hooks) {
       dummy.updateMatrix();
       cones.setMatrixAt(i, dummy.matrix);
     });
-    cTrunks.castShadow = true;
-    cones.castShadow = true;
+    cTrunks.castShadow = false;
+    cones.castShadow = false;
     cTrunks.instanceMatrix.needsUpdate = true;
     cones.instanceMatrix.needsUpdate = true;
     scene.add(cTrunks);
@@ -517,7 +612,7 @@ export function createRenderer3D(canvas, world, hooks) {
   const puffMats = [0xffffff, 0xf2f5f7, 0xe6ebef].map(
     (c) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.96 }),
   );
-  function addCloud(cx, cy, cz, s, drift, puffs) {
+  function addCloud(cx, cy, cz, s, drift, puffs, flat) {
     const group = new THREE.Group();
     const offsets = [[0, 0, 0, 1], [-0.85, 0.14, 0.1, 0.62], [0.85, 0.12, -0.1, 0.66], [-0.3, -0.22, 0.2, 0.7], [0.4, -0.2, -0.15, 0.62]];
     const n = Math.min(puffs, offsets.length);
@@ -525,7 +620,7 @@ export function createRenderer3D(canvas, world, hooks) {
       const [ox, oy, oz, os] = offsets[i];
       const puff = new THREE.Mesh(puffGeo, puffMats[i % puffMats.length]);
       puff.position.set(ox * s, oy * s, oz * s);
-      puff.scale.set(s * os, s * os * 0.55, s * os * 0.7);
+      puff.scale.set(s * os, s * os * 0.55 * (flat || 1), s * os * 0.7);
       group.add(puff);
     }
     group.position.set(cx, cy, cz);
@@ -539,26 +634,37 @@ export function createRenderer3D(canvas, world, hooks) {
       addCloud(range(rng, -1800, 1800), range(rng, 95, 175), range(rng, -1800, 1800), range(rng, 20, 45), range(rng, 1.5, 4), 5);
     }
     // Sea of clouds: a low deck over the water, below the flight path, so
-    // the chase view flies above a white sea with land far below.
+    // the chase view flies above a white sea with land far below. Biased
+    // toward the ring corridor (Harbour -> Coral -> Turtle) so the deck is
+    // actually under the plane in the chase shots. Flatter and wider than
+    // the high clouds (flat 0.6) so they read as a cloud sea from above,
+    // not cotton balls; sparse enough not to bury the sea.
     let placed = 0;
     let guard = 0;
-    while (placed < 60 && guard < 600) {
+    while (placed < 85 && guard < 1100) {
       guard += 1;
-      const x = range(rng, -2000, 2000);
-      const z = range(rng, -2000, 2000);
+      let x;
+      let z;
+      if (rng() < 0.6) {
+        x = range(rng, -1400, 300);
+        z = range(rng, -1200, 300);
+      } else {
+        x = range(rng, -2000, 2000);
+        z = range(rng, -2000, 2000);
+      }
       if (world.groundHeight(x, z) > 5) continue;
-      addCloud(x, 35 + rng() * 15, z, range(rng, 10, 20), range(rng, 1.5, 4), 5);
+      addCloud(x, 50 + rng() * 20, z, range(rng, 16, 28), range(rng, 1.5, 4), 5, 0.6);
       placed += 1;
     }
-    // Towering cumulus: six tall stacks for the dramatic layered sky.
-    for (let i = 0; i < 6; i += 1) {
+    // Towering cumulus: four tall stacks for the dramatic layered sky.
+    for (let i = 0; i < 4; i += 1) {
       const cx = range(rng, -1700, 1700);
       const cz = range(rng, -1700, 1700);
       const drift = range(rng, 1.5, 3);
       for (let k = 0; k < 9; k += 1) {
         const a = k * 2.4;
         const rr = (1 - k / 9) * 46;
-        addCloud(cx + Math.cos(a) * rr, 125 + k * 22, cz + Math.sin(a) * rr, 40 - k * 2.5, drift, 3);
+        addCloud(cx + Math.cos(a) * rr, 125 + k * 22, cz + Math.sin(a) * rr, 36 - k * 2.2, drift, 3);
       }
     }
   }
@@ -763,8 +869,12 @@ export function createRenderer3D(canvas, world, hooks) {
   const ringMat = new THREE.MeshStandardMaterial({
     color: DAY.ringGold, emissive: 0x8a6d00, emissiveIntensity: 0.7, roughness: 0.35, metalness: 0.4,
   });
+  // A ring already flown is faint green, not a solid wall: the chase camera
+  // passes right through it a moment later, and a solid torus that close
+  // fills the whole frame with a green arch (seen in 2-play cycle 1).
   const ringDoneMat = new THREE.MeshStandardMaterial({
     color: DAY.ringGreen, emissive: 0x1d5c2e, emissiveIntensity: 0.7, roughness: 0.35, metalness: 0.4,
+    transparent: true, opacity: 0.2,
   });
   const ringGeo = new THREE.TorusGeometry(13, 0.9, 10, 42);
   const starGeo = new THREE.OctahedronGeometry(2.4);
@@ -1264,10 +1374,13 @@ export function createRenderer3D(canvas, world, hooks) {
       };
       return { pos, look };
     }
-    const back = titleView ? 26 : 24;
-    const camUp = titleView ? 14 : 6.5;
-    const ahead = titleView ? 60 : VIEW.cameraLookAhead;
-    const side = titleView ? 42 : 0;
+    // Polish round: pull the chase camera a little further back and higher
+    // and look further ahead, so more of the scene (village, river, cloud
+    // deck) is in frame instead of empty sea.
+    const back = titleView ? 30 : 27;
+    const camUp = titleView ? 16 : 8;
+    const ahead = titleView ? 70 : 40;
+    const side = titleView ? 48 : 0;
     const pos = {
       x: plane.x - fx * back + Math.cos(h) * side,
       y: plane.y + camUp,
