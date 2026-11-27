@@ -1,142 +1,216 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang="id">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sky Harbour — Island Run</title>
-<link rel="icon" href="./favicon.ico">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>SKY HARBOUR: AIRPLANE RUN</title>
+<link rel="icon" href="favicon.ico">
 <style>
-  /* Golden Hour theme tokens (theme-factory): warm sunset light, ocean sea,
-     glass-dark HUD with cyan text and amber accents — one palette everywhere. */
-  :root {
-    --hud-text: #cfeeff;
-    --hud-amber: #ffcf5e;
-    --hud-red: #ff6b5e;
-    --hud-green: #7dff9a;
-    --hud-glass: rgba(8, 18, 30, 0.72);
-    --hud-line: rgba(140, 220, 255, 0.35);
-  }
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #1e3a5f; }
-  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
-  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  #hud { position: fixed; inset: 0; pointer-events: none; font-family: system-ui, sans-serif; display: none; }
-  #tape { position: absolute; top: 0; left: 0; width: 100%; height: 46px; }
-  .panel {
-    position: absolute; background: var(--hud-glass); border: 1px solid var(--hud-line);
-    border-radius: 8px; color: var(--hud-text); padding: 10px 12px; box-sizing: border-box;
-  }
-  .panel .lab { font-size: 12px; font-weight: 600; color: rgba(207, 238, 255, 0.7); letter-spacing: 0.04em; }
-  .panel .val { font-size: 22px; font-weight: 700; color: var(--hud-text); white-space: nowrap; }
-  .row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; line-height: 1.5; }
-  #hud-left { top: 60px; left: 16px; width: 190px; }
-  #hud-left .row .val { font-size: 19px; }
-  #stall { color: var(--hud-red); font-weight: 700; font-size: 15px; min-height: 18px; }
-  #hud-mission { top: 60px; left: 50%; transform: translateX(-50%); width: 420px; text-align: center; padding: 8px 12px; }
-  #v-mname { color: var(--hud-amber); font-weight: 700; font-size: 13px; letter-spacing: 0.06em; }
-  #v-obj { color: var(--hud-text); font-weight: 600; font-size: 13px; }
-  #hud-right { top: 60px; right: 16px; width: 172px; }
-  #hud-right .row .val { font-size: 20px; }
-  #hud-map { top: 184px; right: 16px; width: 172px; padding: 8px; text-align: center; }
-  #hud-map .lab { display: block; margin-bottom: 6px; }
-  #minimap { width: 148px; height: 148px; display: block; border-radius: 4px; }
-  #hud-att { left: 16px; bottom: 16px; width: 148px; text-align: center; padding: 8px; }
-  #attitude { width: 124px; height: 124px; display: block; margin: 0 auto; }
-  #hud-att .lab { display: block; margin-top: 4px; }
-  #hud-fuel { right: 16px; bottom: 16px; width: 172px; }
-  .bar { height: 12px; background: rgba(255, 255, 255, 0.14); border-radius: 2px; margin: 4px 0 10px; overflow: hidden; }
-  .bar > div { height: 100%; width: 100%; }
-  #bar-thr { background: var(--hud-text); }
-  #v-gear { font-size: 12px; font-weight: 600; color: rgba(207, 238, 255, 0.7); }
-  #v-dmg { font-size: 12px; font-weight: 700; min-height: 15px; }
-  #flash { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); text-align: center; display: none; text-shadow: 0 2px 12px rgba(0,0,0,0.55); }
-  #flash-text { font-size: 44px; font-weight: 800; color: #fff; }
-  #flash-sub { font-size: 19px; font-weight: 600; color: #eaf6ff; margin-top: 6px; }
-  #pullup { position: absolute; top: 32%; left: 50%; transform: translateX(-50%); font-size: 30px; font-weight: 800; color: var(--hud-red); display: none; text-shadow: 0 2px 12px rgba(0,0,0,0.55); }
-  /* Title screen overlay. */
-  #title { position: absolute; inset: 0; display: none; text-align: center; }
-  #title .shade-top { position: absolute; top: 0; left: 0; right: 0; height: 210px; background: rgba(4, 10, 18, 0.22); }
-  #title .shade-bottom { position: absolute; bottom: 0; left: 0; right: 0; height: 92px; background: rgba(4, 10, 18, 0.45); }
-  #title h1 { position: relative; margin: 28px 0 0; font-family: Georgia, "Times New Roman", serif; font-size: 64px; font-weight: 800; color: #fff3c4; text-shadow: 0 2px 16px rgba(0,0,0,0.6); }
-  #title .sub { position: relative; margin-top: 4px; font-family: Georgia, "Times New Roman", serif; font-size: 22px; font-weight: 600; color: var(--hud-text); }
-  #title .tag { position: relative; margin-top: 14px; font-size: 15px; font-weight: 600; color: #eaf6ff; }
-  #cards { position: absolute; left: 50%; bottom: 118px; transform: translateX(-50%); display: flex; gap: 26px; pointer-events: auto; }
-  .card {
-    width: 300px; min-height: 150px; padding: 18px 16px; box-sizing: border-box; cursor: pointer;
-    background: rgba(8, 18, 30, 0.78); border: 1.5px solid rgba(140, 220, 255, 0.45); border-radius: 12px;
-    color: #fff; font-family: system-ui, sans-serif; text-align: center;
-  }
-  .card.hover, .card:hover, .card:focus-visible { border-color: var(--hud-amber); border-width: 2.5px; outline: none; }
-  .card .press { display: block; color: var(--hud-amber); font-size: 15px; font-weight: 800; }
-  .card .name { display: block; margin-top: 10px; font-family: Georgia, "Times New Roman", serif; font-size: 26px; font-weight: 800; }
-  .card .tag { display: block; margin-top: 8px; color: var(--hud-text); font-size: 13.5px; font-weight: 600; }
-  .card .meta { display: block; margin-top: 10px; color: rgba(207, 238, 255, 0.65); font-size: 12px; font-weight: 600; }
-  #title .controls { position: absolute; bottom: 58px; left: 0; right: 0; color: #dfeeff; font-size: 14px; font-weight: 600; }
-  #title .tip { position: absolute; bottom: 32px; left: 0; right: 0; color: rgba(223, 238, 255, 0.75); font-size: 14px; font-weight: 600; }
-  /* Pause / complete / crashed / failed panel. */
-  #panel {
-    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: none;
-    width: 620px; padding: 28px 24px 22px; box-sizing: border-box; text-align: center;
-    background: rgba(6, 14, 24, 0.82); border: 1.5px solid rgba(140, 220, 255, 0.5); border-radius: 14px;
-  }
-  #panel-title { font-family: Georgia, "Times New Roman", serif; font-size: 34px; font-weight: 800; color: #fff; margin: 0 0 12px; }
-  #panel-lines p { font-size: 15px; font-weight: 600; color: #dfeeff; margin: 8px 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0b1622;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif; color: #eef4fa;
+    -webkit-user-select: none; user-select: none; }
+  #game { position: fixed; inset: 0; }
+  #game canvas { display: block; }
+  .hidden { display: none !important; }
+  .screen { position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px; padding: 20px;
+    background: linear-gradient(180deg, rgba(6,18,32,.55), rgba(6,18,32,.82));
+    z-index: 20; text-align: center; overflow-y: auto; }
+  .title { font-size: clamp(30px, 6vw, 58px); font-weight: 800; letter-spacing: 2px;
+    color: #ffd23e; text-shadow: 0 3px 0 #7a4d00, 0 8px 24px rgba(0,0,0,.6); }
+  .subtitle { font-size: clamp(14px, 2.4vw, 20px); color: #bcd7ea; letter-spacing: 3px; }
+  .btn { background: linear-gradient(180deg, #ffb52e, #f08c00); color: #231303;
+    border: none; border-radius: 12px; padding: 13px 34px; font-size: 18px; font-weight: 800;
+    cursor: pointer; box-shadow: 0 4px 0 #8a5200, 0 8px 18px rgba(0,0,0,.45); }
+  .btn:hover { filter: brightness(1.08); }
+  .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #8a5200; }
+  .btn.ghost { background: rgba(255,255,255,.12); color: #eef4fa; box-shadow: none;
+    border: 1px solid rgba(255,255,255,.35); font-size: 15px; padding: 10px 22px; }
+  .btn.small { padding: 8px 16px; font-size: 14px; margin-top: 8px; }
+  .btnrow { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+  .panel { background: rgba(8,22,38,.78); border: 1px solid rgba(255,255,255,.16);
+    border-radius: 16px; padding: 18px 22px; max-width: 560px; width: 100%; }
+  .panel h2 { color: #ffd23e; margin-bottom: 10px; font-size: 22px; }
+  .card { background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.14);
+    border-radius: 12px; padding: 12px; margin: 8px 0; text-align: left; }
+  .card.selected { border-color: #ffd23e; box-shadow: 0 0 0 2px rgba(255,210,62,.5); }
+  .card-name { font-weight: 800; font-size: 17px; }
+  .card-desc { color: #bcd7ea; font-size: 13px; margin: 3px 0; }
+  .card-stats { color: #8fb4cc; font-size: 12px; }
+  .mission { display: flex; justify-content: space-between; gap: 12px; padding: 10px 4px;
+    border-bottom: 1px solid rgba(255,255,255,.1); font-size: 14px; text-align: left; }
+  .mission.done { color: #7be495; }
+  .swatch { width: 52px; height: 52px; border-radius: 12px; display: inline-block;
+    margin: 6px; cursor: pointer; border: 3px solid transparent; }
+  .swatch.selected { border-color: #fff; box-shadow: 0 0 0 2px #ffd23e; }
+  .board-row { display: flex; justify-content: space-between; gap: 10px; padding: 8px 4px;
+    border-bottom: 1px solid rgba(255,255,255,.1); font-size: 15px; }
+  .empty { color: #8fb4cc; font-size: 14px; padding: 12px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.1); font-size: 15px; }
+  select, input[type=range] { accent-color: #ffb52e; }
+  select { background: #12283d; color: #eef4fa; border: 1px solid rgba(255,255,255,.3);
+    border-radius: 8px; padding: 8px 10px; font-size: 15px; }
+  .badge { display: inline-block; background: #ffd23e; color: #231303; font-weight: 800;
+    border-radius: 20px; padding: 4px 14px; font-size: 14px; margin-top: 4px; }
+  .keys { color: #8fb4cc; font-size: 13px; line-height: 1.7; }
+  /* HUD */
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+  .hud-top { position: absolute; top: 0; left: 0; right: 0; display: flex;
+    justify-content: space-between; align-items: flex-start; padding: 12px 14px; gap: 8px; }
+  .hud-box { background: rgba(6,18,32,.62); border: 1px solid rgba(255,255,255,.18);
+    border-radius: 12px; padding: 8px 12px; font-size: 15px; line-height: 1.5; }
+  .hud-box b { color: #ffd23e; }
+  .hud-label { font-size: 11px; color: #8fb4cc; letter-spacing: 1px; }
+  .bar { width: 130px; height: 9px; background: rgba(255,255,255,.18); border-radius: 6px; overflow: hidden; }
+  .bar > div { height: 100%; background: #37b268; }
+  .bar > div.low { background: #e8442e; }
+  .bar.turbo > div { background: #ff9a2e; }
+  .bar.turbo > div.ready { background: #ffd23e; }
+  #hud-health.low { color: #ff6a5e; }
+  #btn-pause { pointer-events: auto; background: rgba(6,18,32,.62); color: #eef4fa;
+    border: 1px solid rgba(255,255,255,.3); border-radius: 10px; width: 42px; height: 42px;
+    font-size: 18px; cursor: pointer; }
+  #toast { position: absolute; left: 50%; bottom: 24%; transform: translateX(-50%);
+    background: rgba(6,18,32,.85); border: 1px solid #ffd23e; color: #ffd23e;
+    padding: 9px 18px; border-radius: 20px; font-weight: 700; font-size: 15px; white-space: nowrap; }
+  #stick-zone { position: absolute; left: 18px; bottom: 18px; width: 128px; height: 128px;
+    border-radius: 50%; background: rgba(255,255,255,.09);
+    border: 1px solid rgba(255,255,255,.25); pointer-events: auto; display: none; }
+  #stick-knob { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px;
+    margin: -26px 0 0 -26px; border-radius: 50%; background: rgba(255,210,62,.85); }
+  #btn-turbo { position: absolute; right: 18px; bottom: 30px; width: 84px; height: 84px;
+    border-radius: 50%; background: rgba(255,154,46,.85); color: #231303; font-weight: 800;
+    font-size: 15px; border: none; pointer-events: auto; display: none; }
+  @media (pointer: coarse) { #stick-zone, #btn-turbo { display: block; } }
+  #testout { position: fixed; left: -9999px; top: 0; }
+  .big-score { font-size: clamp(38px, 8vw, 64px); font-weight: 800; color: #ffd23e; }
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 22px;
+    font-size: 15px; margin: 8px 0; text-align: left; }
+  .stat-grid b { color: #ffd23e; float: right; }
 </style>
 </head>
 <body>
-<canvas id="game" aria-label="Sky Harbour Island Run: fly the tourer over the archipelago, through the golden rings, and land on the island runways"></canvas>
-<p id="status" role="status" aria-live="polite"></p>
-<div id="hud">
-  <canvas id="tape"></canvas>
-  <div class="panel" id="hud-left">
-    <div class="row"><span class="lab">ALTITUDE</span><span class="val" id="v-alt">0 ft</span></div>
-    <div class="row"><span class="lab">AIRSPEED</span><span class="val" id="v-spd">0 kt</span></div>
-    <div class="row"><span class="lab">VERT SPEED</span><span class="val" id="v-vs">+0 fpm</span></div>
-    <div class="row"><span class="lab">HEADING</span><span class="val" id="v-hdg">000° N</span></div>
-    <div id="stall"></div>
+<div id="game"></div>
+
+<div id="hud" class="hidden">
+  <div class="hud-top">
+    <div class="hud-box">
+      <div class="hud-label">SKOR</div><b id="hud-score">0</b>
+      <div style="margin-top:4px">🪙 <b id="hud-coins">0</b> &nbsp;·&nbsp; <span id="hud-dist">0 m</span></div>
+      <div style="margin-top:4px"><span id="hud-speed">0 km/h</span> &nbsp;·&nbsp; <span id="hud-env">Tropical Island</span></div>
+    </div>
+    <div class="hud-box">
+      <div class="hud-label">BAHAN BAKAR</div>
+      <div class="bar"><div id="hud-fuel" style="width:100%"></div></div>
+      <div class="hud-label" style="margin-top:6px">NYAWA &nbsp;<span id="hud-health">♥♥♥</span></div>
+      <div class="hud-label" style="margin-top:6px">TURBO</div>
+      <div class="bar turbo"><div id="hud-turbo" style="width:100%"></div></div>
+    </div>
+    <button id="btn-pause" title="Jeda (P)">II</button>
   </div>
-  <div class="panel" id="hud-mission">
-    <div id="v-mname">RING RUN</div>
-    <div id="v-obj">Fly free</div>
+  <div id="toast" class="hidden"></div>
+  <div id="stick-zone"><div id="stick-knob"></div></div>
+  <button id="btn-turbo">TURBO</button>
+</div>
+
+<div id="screen-menu" class="screen">
+  <div class="title">SKY HARBOUR</div>
+  <div class="subtitle">✈ AIRPLANE RUN ✈</div>
+  <div id="menu-best">Belum ada penerbangan</div>
+  <div><span id="menu-coins">🪙 0</span> &nbsp;·&nbsp; Pesawat: <b id="menu-plane">Skyhopper</b></div>
+  <button id="btn-play" class="btn">▶ MAIN</button>
+  <div class="btnrow">
+    <button id="btn-planes" class="btn ghost">Pesawat</button>
+    <button id="btn-garage" class="btn ghost">Garasi</button>
+    <button id="btn-missions" class="btn ghost">Misi</button>
+    <button id="btn-settings" class="btn ghost">Pengaturan</button>
+    <button id="btn-board" class="btn ghost">Peringkat</button>
   </div>
-  <div class="panel" id="hud-right">
-    <div class="row"><span class="lab">SCORE</span><span class="val" id="v-score">0</span></div>
-    <div class="row"><span class="lab">TIME LEFT</span><span class="val" id="v-time">08:00</span></div>
-    <div class="row"><span class="lab">PROGRESS</span><span class="val" id="v-prog" style="font-size:15px">0/8 rings</span></div>
-  </div>
-  <div class="panel" id="hud-map">
-    <span class="lab">ISLAND MAP</span>
-    <canvas id="minimap" width="148" height="148"></canvas>
-  </div>
-  <div class="panel" id="hud-att">
-    <canvas id="attitude" width="124" height="124"></canvas>
-    <span class="lab">ATTITUDE</span>
-  </div>
-  <div class="panel" id="hud-fuel">
-    <span class="lab">FUEL</span>
-    <div class="bar"><div id="bar-fuel"></div></div>
-    <span class="lab">THROTTLE</span>
-    <div class="bar"><div id="bar-thr"></div></div>
-    <div id="v-gear">GEAR DOWN</div>
-    <div id="v-dmg"></div>
-  </div>
-  <div id="flash"><div id="flash-text"></div><div id="flash-sub"></div></div>
-  <div id="pullup">PULL UP</div>
-  <div id="title">
-    <div class="shade-top"></div>
-    <div class="shade-bottom"></div>
-    <h1>SKY HARBOUR</h1>
-    <div class="sub">— Island Run —</div>
-    <div class="tag">Fly the rings, land the runways, mind your fuel. A complete flight game — throttle, turn and landing all matter.</div>
-    <div id="cards"></div>
-    <div class="controls">Fly: ↑ ↓ pitch · ← → bank &amp; turn · SHIFT throttle up · CTRL throttle down · hold mouse to steer · C cockpit · P pause · R restart</div>
-    <div class="tip">Tip: climb costs speed, a steep bank sinks — fly the rings clean and land gently for the smooth bonus.</div>
-  </div>
-  <div id="panel">
-    <h2 id="panel-title"></h2>
-    <div id="panel-lines"></div>
+  <button id="btn-mute-menu" class="btn ghost">🔊 Suara: klik untuk bisu</button>
+  <div class="keys">WASD / Panah: terbang &nbsp;·&nbsp; Shift: turbo &nbsp;·&nbsp; P: jeda &nbsp;·&nbsp; M: bisu<br>
+  Terbang menembus cincin, kumpulkan koin, isi bahan bakar, jangan menabrak!</div>
+</div>
+
+<div id="screen-planes" class="screen hidden">
+  <div class="panel">
+    <h2>Pilih Pesawat</h2>
+    <div id="planes-coins">🪙 0</div>
+    <div id="plane-list"></div>
+    <button class="btn ghost" data-back>← Kembali</button>
   </div>
 </div>
+
+<div id="screen-garage" class="screen hidden">
+  <div class="panel">
+    <h2>Garasi — Cat Pesawat</h2>
+    <div id="garage-plane">Cat Skyhopper</div>
+    <div id="garage-list"></div>
+    <div id="garage-note" class="keys"></div>
+    <button class="btn ghost" data-back>← Kembali</button>
+  </div>
+</div>
+
+<div id="screen-missions" class="screen hidden">
+  <div class="panel">
+    <h2>Misi &amp; Tantangan</h2>
+    <div id="mission-list"></div>
+    <button class="btn ghost" data-back>← Kembali</button>
+  </div>
+</div>
+
+<div id="screen-settings" class="screen hidden">
+  <div class="panel">
+    <h2>Pengaturan</h2>
+    <div class="row"><span>Kualitas grafis</span><select id="quality-select"></select></div>
+    <div class="row"><span>Suara</span><label><input type="checkbox" id="mute-toggle"> Bisu</label></div>
+    <div class="row"><span>Sensitivitas kendali</span><span><input type="range" id="sens-range" min="0.5" max="2" step="0.1" value="1"> <b id="sens-value">1.0×</b></span></div>
+    <button class="btn ghost" data-back>← Kembali</button>
+  </div>
+</div>
+
+<div id="screen-board" class="screen hidden">
+  <div class="panel">
+    <h2>Peringkat Lokal</h2>
+    <div id="board-list"></div>
+    <button class="btn ghost" data-back>← Kembali</button>
+  </div>
+</div>
+
+<div id="screen-pause" class="screen hidden">
+  <div class="title" style="font-size:40px">JEDA</div>
+  <button id="btn-resume" class="btn">▶ Lanjutkan</button>
+  <div class="btnrow">
+    <button id="btn-restart-pause" class="btn ghost">↻ Ulangi</button>
+    <button id="btn-quit-pause" class="btn ghost">Menu Utama</button>
+  </div>
+</div>
+
+<div id="screen-over" class="screen hidden">
+  <div class="title" style="font-size:40px">GAME OVER</div>
+  <div id="over-newbest" class="badge hidden">★ SKOR TERBAIK BARU ★</div>
+  <div class="big-score" id="over-score">0</div>
+  <div class="panel" style="max-width:420px">
+    <div class="stat-grid">
+      <span>Skor terbaik <b id="over-best">0</b></span>
+      <span>Jarak <b id="over-dist">0 m</b></span>
+      <span>Koin <b id="over-coins">🪙 0</b></span>
+      <span>Cincin <b id="over-rings">0 cincin</b></span>
+    </div>
+    <div id="over-reward" class="keys"></div>
+  </div>
+  <div class="btnrow">
+    <button id="btn-restart" class="btn">↻ Terbang Lagi</button>
+    <button id="btn-menu" class="btn ghost">Menu Utama</button>
+  </div>
+</div>
+
+<div id="testout"></div>
+
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>
