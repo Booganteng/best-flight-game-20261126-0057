@@ -1,172 +1,141 @@
-// The aircraft: position, speed, attitude, fuel and damage, and the one step()
-// that moves it. Arcade physics with real trade-offs: climbing bleeds speed,
-// a steep bank without throttle sinks, and speed is what keeps you flying.
-import { PLANE, STEP } from './config.js';
-import { clamp, angleDelta } from './random.js';
+// Plane models built from Three.js primitives — one builder per kind.
+// Returns a THREE.Group whose nose points toward -Z (direction of flight).
 
-export function createAircraft(world) {
-  const home = world.home;
-  return {
-    // Parked at the south end of the home runway, facing north down the strip.
-    x: home.x - Math.sin(home.runway.heading) * (home.runway.length / 2 - 30),
-    y: 2,
-    z: home.z - Math.cos(home.runway.heading) * (home.runway.length / 2 - 30),
-    heading: home.runway.heading,
-    pitch: 0, // radians, positive = nose up
-    bank: 0, // radians, positive = right wing down
-    speed: 0,
-    throttle: 0,
-    verticalSpeed: 0,
-    fuel: PLANE.fuelCapacity,
-    damage: 0,
-    gearDown: true,
-    onGround: true,
-    flying: false,
-    propAngle: 0,
-    distanceFlown: 0,
-  };
+import * as THREE from 'three';
+
+function mat(color, opts = {}) {
+  return new THREE.MeshStandardMaterial({ color, metalness: 0.35, roughness: 0.5, ...opts });
 }
 
-// `input` is { pitch: -1..1, bank: -1..1, throttle: -1..1 } from the pilot
-// (or the autopilot). Returns an event string when something notable happens.
-export function stepAircraft(plane, input, world, dt) {
-  const events = [];
+function box(w, h, d, color, x = 0, y = 0, z = 0) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(color));
+  m.position.set(x, y, z);
+  return m;
+}
 
-  // Throttle moves toward its target; the engine only burns fuel while running.
-  const targetThrottle = clamp(plane.throttle + input.throttle * 55 * dt, PLANE.minThrottle, PLANE.maxThrottle);
-  plane.throttle = targetThrottle;
-  if (plane.throttle > 2 && plane.fuel > 0) {
-    plane.fuel = Math.max(0, plane.fuel - PLANE.fuelBurn * (0.35 + plane.throttle / 100) * dt);
-  }
-  const engineOut = plane.fuel <= 0;
+function cyl(rt, rb, h, color, x = 0, y = 0, z = 0, seg = 12) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), mat(color));
+  m.position.set(x, y, z);
+  return m;
+}
 
-  // Target speed follows throttle; drag pulls the speed toward it.
-  const targetSpeed = engineOut
-    ? 0
-    : PLANE.cruiseSpeed * (0.35 + (plane.throttle / 100) * 1.35);
-  const drag = plane.onGround ? 2.2 : 0.55;
-  plane.speed += clamp(targetSpeed - plane.speed, -PLANE.accel * drag * dt, PLANE.accel * dt);
+function cone(r, h, color, x = 0, y = 0, z = 0, seg = 12) {
+  const m = new THREE.Mesh(new THREE.ConeGeometry(r, h, seg), mat(color));
+  m.position.set(x, y, z);
+  return m;
+}
 
-  // Pitch: the pilot asks, the wing answers. Climbing costs speed, diving gains it.
-  const wantPitch = clamp(input.pitch * 0.42, -0.42, 0.42);
-  plane.pitch += clamp(wantPitch - plane.pitch, -1.4 * dt, 1.4 * dt);
-  const climbPower = Math.sin(plane.pitch);
-  if (!plane.onGround) {
-    plane.speed -= climbPower * 26 * dt; // climbing bleeds speed
-    plane.speed = Math.max(8, Math.min(PLANE.maxSpeed, plane.speed));
-  }
+function sphere(r, color, x = 0, y = 0, z = 0) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 10), mat(color));
+  m.position.set(x, y, z);
+  return m;
+}
 
-  // Bank rolls the wing; the bank turns the heading, faster when fast.
-  // On the ground the wheels keep the plane straight: no turning on the roll.
-  const wantBank = plane.onGround
-    ? 0
-    : clamp(input.bank * PLANE.maxBank, -PLANE.maxBank, PLANE.maxBank);
-  plane.bank += clamp(wantBank - plane.bank, -PLANE.bankRate * dt, PLANE.bankRate * dt);
-  const turnRate = plane.onGround
-    ? 0
-    : plane.bank * PLANE.turnFactor * clamp(plane.speed / PLANE.cruiseSpeed, 0.4, 1.4);
-  plane.heading += turnRate * dt;
+// Shared airframe: fuselage + main wing + tail. `cfg` carries colors.
+function airframe(color, accent, long = false) {
+  const g = new THREE.Group();
+  const body = cyl(0.55, 0.42, long ? 4.6 : 3.6, color, 0, 0, 0);
+  body.rotation.x = Math.PI / 2;
+  g.add(body);
+  const nose = cone(0.55, 1.1, accent, 0, 0, long ? -2.85 : -2.35);
+  nose.rotation.x = -Math.PI / 2;
+  g.add(nose);
+  const tail = cone(0.42, 0.9, color, 0, 0, long ? 2.7 : 2.2);
+  tail.rotation.x = Math.PI / 2;
+  g.add(tail);
+  const wing = box(6.4, 0.14, 1.5, accent, 0, -0.05, 0.1);
+  g.add(wing);
+  const hStab = box(2.4, 0.1, 0.9, accent, 0, 0.15, long ? 2.45 : 1.95);
+  g.add(hStab);
+  const fin = box(0.12, 1.0, 0.9, accent, 0, 0.55, long ? 2.45 : 1.95);
+  g.add(fin);
+  const canopy = sphere(0.42, 0x1c2f4a, 0, 0.42, -0.9);
+  canopy.scale.set(1, 0.7, 1.6);
+  g.add(canopy);
+  return g;
+}
 
-  // A steep bank without speed or throttle sinks the aircraft: turn discipline.
-  let sink = 0;
-  if (!plane.onGround) {
-    const liftLoss = Math.abs(plane.bank) * 3.2 + (plane.speed < PLANE.stallSpeed ? 9 : 0);
-    sink = liftLoss;
-  }
+function addProp(g, color) {
+  const hub = sphere(0.22, color, 0, 0, -3.0);
+  g.add(hub);
+  const bladeGeo = new THREE.BoxGeometry(0.14, 1.5, 0.06);
+  const blade = new THREE.Mesh(bladeGeo, mat(0x222222));
+  blade.position.set(0, 0, -3.05);
+  blade.name = 'prop';
+  g.add(blade);
+  const blade2 = blade.clone();
+  blade2.rotation.z = Math.PI / 2;
+  blade2.name = 'prop2';
+  g.add(blade2);
+}
 
-  plane.verticalSpeed = Math.sin(plane.pitch) * plane.speed - sink;
-  if (plane.onGround) plane.verticalSpeed = 0;
-
-  // Move.
-  const forward = plane.onGround ? Math.max(plane.speed, 0) : plane.speed;
-  plane.x += Math.sin(plane.heading) * forward * dt;
-  plane.z += Math.cos(plane.heading) * forward * dt;
-  plane.y += plane.verticalSpeed * dt;
-  plane.distanceFlown += forward * dt;
-  plane.propAngle += (0.4 + plane.throttle / 12) * dt * 10;
-
-  // Take-off: enough speed and a pulled nose lifts the wheels, with a small
-  // hop so the ground-contact check below does not fire on the same step.
-  if (plane.onGround && plane.speed > 34 && plane.pitch > 0.06) {
-    plane.onGround = false;
-    plane.flying = true;
-    plane.y = Math.max(plane.y, world.groundHeight(plane.x, plane.z) + 2);
-    events.push('takeoff');
-  }
-
-  // Gear follows speed: down when slow, up when fast and flying.
-  plane.gearDown = plane.speed < PLANE.gearSpeed;
-
-  // Keep the heading wrapped so it never grows without bound.
-  plane.heading = angleDelta(0, plane.heading);
-
-  // Stay inside the archipelago: the sea beyond is a soft wall that steers
-  // the plane back toward the islands instead of flipping it around.
-  const half = world.half;
-  const nearEdge = Math.abs(plane.x) > half - 60 || Math.abs(plane.z) > half - 60;
-  if (nearEdge) {
-    const toCentre = Math.atan2(-plane.x, -plane.z);
-    plane.heading += angleDelta(plane.heading, toCentre) * 1.6 * dt;
-    plane.x = clamp(plane.x, -half, half);
-    plane.z = clamp(plane.z, -half, half);
-    if (!plane._edgeWarned) {
-      events.push('turnback');
-      plane._edgeWarned = true;
-    }
+export function buildPlane(planeDef) {
+  const g = new THREE.Group();
+  const { color, accent, kind } = planeDef;
+  if (kind === 'prop') {
+    g.add(airframe(color, accent));
+    addProp(g, accent);
+  } else if (kind === 'stunt') {
+    g.add(airframe(color, accent));
+    const topWing = box(5.2, 0.12, 1.1, accent, 0, 0.95, 0.1);
+    g.add(topWing);
+    const strutL = box(0.1, 0.9, 0.1, color, -1.9, 0.5, 0.1);
+    const strutR = box(0.1, 0.9, 0.1, color, 1.9, 0.5, 0.1);
+    g.add(strutL, strutR);
+    addProp(g, accent);
+    // Smoke tips for the stunt plane.
+    const tipL = sphere(0.12, 0xffffff, -3.2, -0.05, 0.1);
+    const tipR = sphere(0.12, 0xffffff, 3.2, -0.05, 0.1);
+    g.add(tipL, tipR);
+  } else if (kind === 'jet') {
+    g.add(airframe(color, accent, true));
+    const intakeL = cyl(0.3, 0.3, 1.2, 0x333344, -0.9, -0.15, -0.6);
+    intakeL.rotation.x = Math.PI / 2;
+    const intakeR = cyl(0.3, 0.3, 1.2, 0x333344, 0.9, -0.15, -0.6);
+    intakeR.rotation.x = Math.PI / 2;
+    g.add(intakeL, intakeR);
+    const flame = cone(0.28, 1.0, 0xff9a2e, 0, 0, 3.1);
+    flame.rotation.x = Math.PI / 2;
+    flame.name = 'flame';
+    flame.visible = false;
+    g.add(flame);
+    // Swept wings: narrower, angled back.
+    const wing = g.children.find((c) => c.geometry && c.geometry.type === 'BoxGeometry' && c.scale.x === 1);
+    void wing;
   } else {
-    plane._edgeWarned = false;
+    // future: delta wing, glowing trim, twin tail.
+    const body = cyl(0.5, 0.3, 4.2, color, 0, 0, 0);
+    body.rotation.x = Math.PI / 2;
+    g.add(body);
+    const nose = cone(0.5, 1.4, accent, 0, 0, -2.8);
+    nose.rotation.x = -Math.PI / 2;
+    g.add(nose);
+    const delta = new THREE.Mesh(new THREE.ConeGeometry(2.6, 3.4, 4), mat(color));
+    delta.rotation.x = Math.PI / 2;
+    delta.rotation.y = Math.PI / 4;
+    delta.scale.set(1.4, 1, 0.32);
+    delta.position.set(0, 0, 1.1);
+    g.add(delta);
+    const glow = new THREE.Mesh(
+      new THREE.TorusGeometry(0.55, 0.06, 8, 24),
+      new THREE.MeshBasicMaterial({ color: accent }),
+    );
+    glow.position.set(0, 0, -2.2);
+    g.add(glow);
+    const finL = box(0.1, 1.1, 0.8, accent, -0.8, 0.5, 2.3);
+    const finR = box(0.1, 1.1, 0.8, accent, 0.8, 0.5, 2.3);
+    g.add(finL, finR);
+    const flame = cone(0.3, 1.3, 0x37e6c8, 0, 0, 2.9);
+    flame.rotation.x = Math.PI / 2;
+    flame.name = 'flame';
+    flame.visible = false;
+    g.add(flame);
+    const canopy = sphere(0.36, 0x0a1a2a, 0, 0.4, -0.9);
+    canopy.scale.set(1, 0.6, 1.7);
+    g.add(canopy);
   }
-
-  // Ground contact. A plane climbing away from the strip is leaving the
-  // ground, not hitting it; a plane buried in a hillside is a crash.
-  const ground = world.groundHeight(plane.x, plane.z);
-  if (plane.y <= ground + 0.4 && !plane.onGround) {
-    if (plane.y < ground - 0.5) {
-      events.push('crashed');
-      return { events, runway: null, crashed: true };
-    }
-    if (plane.verticalSpeed >= 1) {
-      // Skimming the ground while climbing: stay airborne, keep the height.
-      plane.y = ground + 0.4;
-      return { events, runway: null };
-    }
-    const runway = world.runwayAt(plane.x, plane.z);
-    const sinkRate = -plane.verticalSpeed;
-    const aligned = runway !== null && Math.abs(angleDelta(plane.heading, runway.island.runway.heading)) < 0.5;
-    if (runway && aligned && plane.speed <= PLANE.landingSpeedMax && sinkRate <= PLANE.landingSinkMax) {
-      plane.onGround = true;
-      plane.y = ground + 0.4;
-      plane.pitch = 0;
-      plane.bank = 0;
-      events.push(sinkRate <= 2.2 ? 'landed-smooth' : 'landed');
-      return { events, runway };
-    }
-    if (ground > 2 && plane.speed <= 30 && sinkRate <= PLANE.roughSinkMax) {
-      // A gentle touchdown on grass: a rough landing, heavy damage, but alive.
-      plane.onGround = true;
-      plane.y = ground + 0.4;
-      plane.damage += 45;
-      plane.speed *= 0.3;
-      events.push('rough');
-      return { events, runway: null };
-    }
-    if (ground <= 2 && plane.speed <= 32 && sinkRate <= PLANE.roughSinkMax) {
-      // Ditching in the sea, gently: the sortie ends, the pilot survives.
-      plane.onGround = true;
-      plane.y = 0.4;
-      plane.speed = 0;
-      events.push('ditched');
-      return { events, runway: null };
-    }
-    events.push('crashed');
-    return { events, runway: null, crashed: true };
-  }
-  if (plane.onGround) plane.y = Math.max(plane.y, ground + 0.4);
-
-  return { events, runway: null };
-}
-
-export function addDamage(plane, amount) {
-  plane.damage = Math.min(PLANE.maxDamage, plane.damage + amount);
-  return plane.damage >= PLANE.maxDamage;
+  g.traverse((o) => {
+    if (o.isMesh) { o.castShadow = true; }
+  });
+  return g;
 }

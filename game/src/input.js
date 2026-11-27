@@ -1,70 +1,103 @@
-// Keyboard and mouse input: one object the game loop reads each frame, plus
-// the one-off key presses (mission pick, pause, restart) the screens consume.
-export function createInput(canvas) {
+// Keyboard + touch input. One shared state object the game loop reads.
+// Arrow keys / WASD steer, Shift turbo, P pause, M mute.
+
+export function createInput() {
+  const state = {
+    left: false, right: false, up: false, down: false,
+    turbo: false, pausePressed: false, mutePressed: false,
+    // Touch joystick: -1..1 on each axis (x = steer, y = climb/dive).
+    joyX: 0, joyY: 0, joyTurbo: false,
+  };
   const keys = new Set();
-  const pressed = new Set(); // keys hit since the last consume()
-  const input = {
-    keys,
-    pressed,
-    mouse: { x: 0, y: 0, down: false, clicked: false },
-    // Continuous control, -1..1: pitch (up/down), bank (left/right), throttle.
-    control() {
-      const pitch = (keys.has('ArrowUp') || keys.has('KeyW') ? 1 : 0)
-        - (keys.has('ArrowDown') || keys.has('KeyS') ? 1 : 0);
-      const bank = (keys.has('ArrowRight') || keys.has('KeyD') ? 1 : 0)
-        - (keys.has('ArrowLeft') || keys.has('KeyA') ? 1 : 0);
-      const throttle = (keys.has('ShiftLeft') || keys.has('ShiftRight') || keys.has('KeyE') ? 1 : 0)
-        - (keys.has('ControlLeft') || keys.has('KeyQ') ? 1 : 0);
-      // Mouse steering: holding the mouse steers toward the pointer, like a yoke.
-      let mousePitch = 0;
-      let mouseBank = 0;
-      if (input.mouse.down) {
-        const rect = canvas.getBoundingClientRect();
-        const nx = (input.mouse.x - rect.left) / rect.width - 0.5;
-        const ny = (input.mouse.y - rect.top) / rect.height - 0.5;
-        mouseBank = Math.max(-1, Math.min(1, nx * 2.4));
-        mousePitch = Math.max(-1, Math.min(1, -ny * 2.2));
+
+  const down = (e) => {
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' '].includes(e.key)) e.preventDefault();
+    keys.add(e.key.length === 1 ? e.key.toLowerCase() : e.key);
+    sync();
+    if (e.key === 'p' || e.key === 'P') state.pausePressed = true;
+    if (e.key === 'm' || e.key === 'M') state.mutePressed = true;
+  };
+  const up = (e) => {
+    keys.delete(e.key.length === 1 ? e.key.toLowerCase() : e.key);
+    sync();
+  };
+  function sync() {
+    state.left = keys.has('ArrowLeft') || keys.has('a');
+    state.right = keys.has('ArrowRight') || keys.has('d');
+    state.up = keys.has('ArrowUp') || keys.has('w');
+    state.down = keys.has('ArrowDown') || keys.has('s');
+    state.turbo = keys.has('Shift');
+  }
+  window.addEventListener('keydown', down);
+  window.addEventListener('keyup', up);
+  window.addEventListener('blur', () => { keys.clear(); sync(); });
+
+  // Touch joystick: a circle the thumb drags inside #stick-zone.
+  const zone = document.getElementById('stick-zone');
+  const knob = document.getElementById('stick-knob');
+  let touchId = null;
+  function zoneCenter() {
+    const r = zone.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2, rad: r.width / 2 };
+  }
+  function moveTouch(t) {
+    const c = zoneCenter();
+    let dx = (t.clientX - c.x) / c.rad;
+    let dy = (t.clientY - c.y) / c.rad;
+    const len = Math.hypot(dx, dy);
+    if (len > 1) { dx /= len; dy /= len; }
+    state.joyX = dx;
+    state.joyY = -dy; // up on screen = climb
+    knob.style.transform = `translate(${dx * 34}px, ${-dy * 34}px)`;
+  }
+  zone.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const t = e.changedTouches[0];
+    touchId = t.identifier;
+    moveTouch(t);
+  }, { passive: false });
+  zone.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    for (const t of e.changedTouches) if (t.identifier === touchId) moveTouch(t);
+  }, { passive: false });
+  const endTouch = (e) => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === touchId) {
+        touchId = null;
+        state.joyX = 0; state.joyY = 0;
+        knob.style.transform = 'translate(0px, 0px)';
       }
+    }
+  };
+  zone.addEventListener('touchend', endTouch);
+  zone.addEventListener('touchcancel', endTouch);
+
+  const turboBtn = document.getElementById('btn-turbo');
+  turboBtn.addEventListener('touchstart', (e) => { e.preventDefault(); state.joyTurbo = true; }, { passive: false });
+  turboBtn.addEventListener('touchend', () => { state.joyTurbo = false; });
+  turboBtn.addEventListener('touchcancel', () => { state.joyTurbo = false; });
+
+  return {
+    state,
+    consumePause() {
+      const p = state.pausePressed;
+      state.pausePressed = false;
+      return p;
+    },
+    consumeMute() {
+      const m = state.mutePressed;
+      state.mutePressed = false;
+      return m;
+    },
+    // Combined axes: keyboard wins, joystick adds.
+    axes() {
+      const x = (state.right ? 1 : 0) - (state.left ? 1 : 0) + state.joyX;
+      const y = (state.up ? 1 : 0) - (state.down ? 1 : 0) + state.joyY;
       return {
-        pitch: Math.max(-1, Math.min(1, pitch + mousePitch)),
-        bank: Math.max(-1, Math.min(1, bank + mouseBank)),
-        throttle,
+        x: Math.max(-1, Math.min(1, x)),
+        y: Math.max(-1, Math.min(1, y)),
+        turbo: state.turbo || state.joyTurbo,
       };
     },
-    // True once for a key pressed since the last call.
-    consume(code) {
-      if (pressed.has(code)) {
-        pressed.delete(code);
-        return true;
-      }
-      return false;
-    },
-    attach() {
-      window.addEventListener('keydown', (event) => {
-        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(event.code)) {
-          event.preventDefault();
-        }
-        if (!event.repeat) pressed.add(event.code);
-        keys.add(event.code);
-      });
-      window.addEventListener('keyup', (event) => keys.delete(event.code));
-      window.addEventListener('blur', () => keys.clear());
-      canvas.addEventListener('pointerdown', (event) => {
-        input.mouse.down = true;
-        input.mouse.x = event.clientX;
-        input.mouse.y = event.clientY;
-      });
-      window.addEventListener('pointermove', (event) => {
-        input.mouse.x = event.clientX;
-        input.mouse.y = event.clientY;
-      });
-      window.addEventListener('pointerup', (event) => {
-        input.mouse.down = false;
-        input.mouse.clicked = true;
-        input.mouse.x = event.clientX;
-        input.mouse.y = event.clientY;
-      });
-    },
   };
-  return input;
 }

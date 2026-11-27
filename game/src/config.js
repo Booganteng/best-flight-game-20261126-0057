@@ -1,109 +1,129 @@
-// Sky Harbour — Island Run: every tunable number for the game lives here, so a
-// balance change is one edit in one place and nothing else has to move.
+// SKY HARBOUR: AIRPLANE RUN — tuning, environments, planes, missions.
+// All values are mine, written fresh for this entry.
+
 export const GAME = {
-  title: 'SKY HARBOUR',
-  subtitle: 'Island Run',
-  version: '1.0.0',
+  title: 'SKY HARBOUR: AIRPLANE RUN',
+  // Flight envelope (world units, seconds).
+  baseSpeed: 26,
+  maxSpeed: 78,
+  speedRamp: 0.55, // +units/s of speed per second survived
+  turboSpeed: 34, // extra speed while turbo held
+  turboDrain: 26, // turbo meter per second
+  turboRegen: 7,
+  lateralRange: 16, // how far left/right the plane can steer
+  verticalMin: 3,
+  verticalMax: 30,
+  lateralSpeed: 26,
+  verticalSpeed: 20,
+  // Survival.
+  maxFuel: 100,
+  fuelDrain: 1.35, // per second
+  fuelPickup: 34,
+  maxHealth: 3,
+  // Scoring.
+  coinScore: 25,
+  ringScore: 100,
+  crystalScore: 150,
+  // Difficulty.
+  obstacleGapStart: 46,
+  obstacleGapMin: 24,
+  ringEveryM: 260,
+  coinRunEveryM: 180,
 };
 
-export const VIEW = {
-  width: 1280,
-  height: 720,
-  focal: 790, // focal length in pixels for the chase-camera projection
-  cameraBack: 17, // metres behind the aircraft
-  cameraUp: 5.2, // metres above the aircraft
-  cameraLookAhead: 34, // metres ahead of the aircraft the camera looks at
-};
-
-export const PLANE = {
-  cruiseSpeed: 58, // m/s at 70% throttle, level flight
-  maxSpeed: 96,
-  stallSpeed: 27, // below this the wing stops flying
-  minThrottle: 0,
-  maxThrottle: 100,
-  accel: 14, // m/s^2 toward the throttle's target speed
-  climbRate: 13, // m/s at full up elevator
-  sinkRate: 16, // m/s at full down elevator
-  bankRate: 1.9, // rad/s the pilot can roll
-  maxBank: 1.05, // rad (~60 deg)
-  turnFactor: 0.62, // heading change per second per radian of bank, scaled by speed
-  fuelCapacity: 100,
-  fuelBurn: 0.28, // units per second at 70% throttle — a full tank flies ~6 min
-  fuelRingBonus: 6, // fuel a flown ring gives back
-  maxDamage: 100,
-  gearSpeed: 34, // below this the gear is down and the plane can land
-  landingSpeedMax: 40, // touchdown above this on a runway is a crash
-  landingSinkMax: 4.5, // m/s of descent a landing may carry
-  roughSinkMax: 3.0, // m/s a rough field landing may carry
-  ringRadius: 13, // metres, golden rings
-  ringScore: 500,
-  starScore: 150,
-  landingScore: 1000,
-  smoothBonus: 400, // extra for a gentle touchdown
-  timeBonusRate: 4, // points per second left on the clock, Ring Run
-};
-
-export const WORLD = {
-  seed: 7,
-  size: 4200, // the archipelago is size x size metres
-  islandCount: 8,
-  cloudCount: 26,
-  starCount: 14,
-  ringCount: 8,
-  hopRunways: 3,
-};
-
-export const MISSIONS = [
+// Seven skies the flight cycles through, one every ~700 m.
+export const ENVIRONMENTS = [
   {
-    id: 'rings',
-    key: '1',
-    name: 'RING RUN',
-    tag: 'Fly all 8 golden rings, then land home',
-    timeLimit: 480,
+    name: 'Tropical Island',
+    sky: 0x8ecfeb, fog: 0xaadcf0, sun: 0xfff2c0, sunPos: [40, 60, -80],
+    ground: 0x2fa36b, groundKind: 'islands', cloud: 0xffffff, ambient: 0xbfd9e8,
   },
   {
-    id: 'hop',
-    key: '2',
-    name: 'ISLAND HOP',
-    tag: 'Land on 3 island runways in order',
-    timeLimit: 420,
+    name: 'Sky City',
+    sky: 0x9fc4e8, fog: 0xb8cfe0, sun: 0xffffff, sunPos: [30, 80, -60],
+    ground: 0x5b6b7a, groundKind: 'city', cloud: 0xf2f6fa, ambient: 0xc3d2de,
   },
   {
-    id: 'free',
-    key: '3',
-    name: 'FREE FLIGHT',
-    tag: 'Explore the archipelago, collect stars',
-    timeLimit: 360,
+    name: 'Snowy Mountains',
+    sky: 0xbcd7f0, fog: 0xcfe2f5, sun: 0xfff6dd, sunPos: [-50, 70, -70],
+    ground: 0xdde6ef, groundKind: 'peaks', cloud: 0xffffff, ambient: 0xd7e6f2,
+  },
+  {
+    name: 'Desert Airspace',
+    sky: 0xf7cf8e, fog: 0xf2c98f, sun: 0xffd27a, sunPos: [60, 45, -40],
+    ground: 0xd9a45b, groundKind: 'dunes', cloud: 0xfff3dd, ambient: 0xe8c48f,
+  },
+  {
+    name: 'Ocean World',
+    sky: 0x6fb7e8, fog: 0x8fc6ea, sun: 0xfff8d0, sunPos: [20, 90, -50],
+    ground: 0x1e6f9e, groundKind: 'ocean', cloud: 0xffffff, ambient: 0xa8c8e0,
+  },
+  {
+    name: 'Storm Zone',
+    sky: 0x5a5f6e, fog: 0x6a7080, sun: 0xcfd6e6, sunPos: [-30, 90, -30],
+    ground: 0x3d4454, groundKind: 'peaks', cloud: 0x8b93a5, ambient: 0x77808f,
+    storm: true,
+  },
+  {
+    name: 'Sunset Paradise',
+    sky: 0xf2a06b, fog: 0xe89a7a, sun: 0xff9a4d, sunPos: [0, 22, -120],
+    ground: 0x7a4a6e, groundKind: 'islands', cloud: 0xffd9c2, ambient: 0xe0a37e,
   },
 ];
 
-export const STEP = 1 / 60; // fixed physics step, seconds
+// Flyable planes. price 0 = owned from the start.
+export const PLANES = [
+  {
+    id: 'prop', name: 'Skyhopper', kind: 'prop', price: 0,
+    color: 0xe8442e, accent: 0xffffff, speed: 1.0, handling: 1.0,
+    desc: 'Pesawat baling-baling kecil yang lincah.',
+  },
+  {
+    id: 'stunt', name: 'Loopwing', kind: 'stunt', price: 300,
+    color: 0x2e7fe8, accent: 0xffd23e, speed: 1.05, handling: 1.25,
+    desc: 'Biplane akrobatik, belok paling tajam.',
+  },
+  {
+    id: 'jet', name: 'Cloudliner', kind: 'jet', price: 900,
+    color: 0xe8e8ec, accent: 0x2e7fe8, speed: 1.2, handling: 0.95,
+    desc: 'Jet pribadi yang cepat dan stabil.',
+  },
+  {
+    id: 'future', name: 'Starhawk X', kind: 'future', price: 2000,
+    color: 0x23232e, accent: 0x37e6c8, speed: 1.35, handling: 1.1,
+    desc: 'Jet futuristik tercepat di langit.',
+  },
+];
 
-// Colours: one dusk palette for sky, sea and land so the whole game reads as
-// one place, not a set of mismatched drawings.
-export const PALETTE = {
-  skyTop: '#1e3a5f',
-  skyMid: '#7fb2d9',
-  skyLow: '#f6c98a',
-  sunCore: '#fff3c4',
-  sunGlow: 'rgba(255, 196, 110, 0.55)',
-  seaFar: '#3f6d8e',
-  seaNear: '#1d4a68',
-  seaGlitter: 'rgba(255, 236, 180, 0.35)',
-  sand: '#e8d29a',
-  grassFar: '#5d8a4a',
-  grass: '#4d7a3e',
-  grassNear: '#3e6b34',
-  rock: '#6b6f66',
-  forest: '#2e5230',
-  runway: '#3a3f45',
-  runwayEdge: '#e8e8e8',
-  ringGold: '#ffc93c',
-  ringGlow: 'rgba(255, 201, 60, 0.45)',
-  hudGlass: 'rgba(8, 18, 30, 0.72)',
-  hudLine: 'rgba(140, 220, 255, 0.85)',
-  hudText: '#cfeeff',
-  hudAmber: '#ffcf5e',
-  hudRed: '#ff6b5e',
-  hudGreen: '#7dff9a',
+// Missions: id, text, target, reward coins.
+export const MISSIONS = [
+  { id: 'd500', text: 'Terbang sejauh 500 m', target: 500, stat: 'distance', reward: 50 },
+  { id: 'd2000', text: 'Terbang sejauh 2.000 m', target: 2000, stat: 'distance', reward: 150 },
+  { id: 'd5000', text: 'Terbang sejauh 5.000 m', target: 5000, stat: 'distance', reward: 400 },
+  { id: 'r5', text: 'Lewati 5 cincin udara', target: 5, stat: 'rings', reward: 100 },
+  { id: 'r15', text: 'Lewati 15 cincin udara', target: 15, stat: 'rings', reward: 250 },
+  { id: 'c20', text: 'Kumpulkan 20 koin', target: 20, stat: 'coins', reward: 80 },
+  { id: 'c60', text: 'Kumpulkan 60 koin', target: 60, stat: 'coins', reward: 200 },
+  { id: 's60', text: 'Bertahan 60 detik tanpa menabrak', target: 60, stat: 'cleanTime', reward: 150 },
+  { id: 's180', text: 'Bertahan 180 detik tanpa menabrak', target: 180, stat: 'cleanTime', reward: 350 },
+];
+
+// Quality presets: pixel ratio cap, shadows, clouds, view distance.
+export const QUALITY = {
+  low: { pixelRatio: 1, shadows: false, clouds: 14, far: 420 },
+  medium: { pixelRatio: 1.5, shadows: false, clouds: 22, far: 560 },
+  high: { pixelRatio: 2, shadows: true, clouds: 30, far: 700 },
+  ultra: { pixelRatio: 2.5, shadows: true, clouds: 42, far: 900 },
+};
+
+export const STORE_KEYS = {
+  coins: 'sh_coins',
+  best: 'sh_best',
+  planes: 'sh_planes',
+  plane: 'sh_plane',
+  missions: 'sh_missions',
+  quality: 'sh_quality',
+  muted: 'sh_muted',
+  board: 'sh_board',
+  daily: 'sh_daily',
 };
